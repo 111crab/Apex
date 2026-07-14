@@ -1,4 +1,4 @@
-# UE Project Context
+﻿# UE Project Context
 
 *Last updated: 2026-07-14*
 
@@ -58,7 +58,7 @@
 
 **Naming prefixes:** Standard UE prefixes are used (`A`, `U`, `F`, `I`).
 **Header style:** `#pragma once`
-**Header organization:** Feature folders under `Source/Apex`; no `Public` / `Private` module split yet.
+**Header organization:** New long-term gameplay code should use Unreal's module split: public headers under `Source/Apex/Public/...`, implementation files under `Source/Apex/Private/...`. Legacy template files still remain in the module root or variant folders until we intentionally clean them up.
 **UObject references:** Existing code commonly uses `TObjectPtr` for reflected UObject references.
 **Log categories in use:**
 - `LogApex` — declared in `Apex.h`, defined in `Apex.cpp`
@@ -68,6 +68,8 @@
 **Additional rules:**
 - Treat current template/variant code as starter material, not as final skill-system architecture.
 - Do not copy Aura code into this project; Aura is an experience source only.
+- New reflected C++ classes placed in `Public/` should use the `APEX_API` export macro.
+- After adding, moving, deleting, or renaming C++ files, run `Scripts/RegenerateProjectFiles.ps1` after code review is accepted and before the user enters UE/Rider for manual configuration; avoid regenerating repeatedly during discussion and iteration.
 
 ## Subsystems in Use
 
@@ -93,7 +95,7 @@
 **GAS usage:**
 - Not yet implemented in project source.
 - No project classes matching `AbilitySystemComponent`, `GameplayAbility`, `GameplayEffect`, `AttributeSet`, `GameplayTag`, `GameplayCue`, or `AbilityTask` were found in the initial scan.
-- Long-term target from `Agent/Context_Migration_From_Aura.md`: `SkillDefinition + AbilityTemplate + CombatEntity + Effect/Buff/State`.
+- Long-term target from `Agent/00_Coordination/Context_Migration_From_Aura.md`: `SkillDefinition + AbilityTemplate + CombatEntity + Effect/Buff/State`.
 
 ## Build Configuration
 
@@ -115,10 +117,14 @@
 
 **Current project phase:**
 - Phase 0 baseline is still in progress.
-- Git initialization is not complete in this workspace; `git status` reports this is not a Git repository.
-- Compile and PIE status are not verified in this scan.
+- Git is initialized. Current observed branch is `master`.
+- `ApexEditor Win64 Development` compile has been verified after the Character cold start and `CameraSpringArm` rename.
+- PIE is not yet verified for the new `AApexPlayerCharacter` path.
+- Active Agent coordination files now live under `Agent/00_Coordination/`; `Agent/README.md` is the root entry.
 
 **Important working constraints:**
-- Do not rush into core skill-system implementation before Lyra / reference-project reading and architecture RFC.
+- Do not rush into core skill-system implementation before Character / Paragon / third-person validation and an Apex-specific architecture RFC.
+- Lyra, learning packs, and external references are read on demand, not as a hard pre-stage for every task.
 - Do not default to MCP for single Blueprint creation, mesh/AnimClass setup, GameMode changes, transform edits, or small Notify edits.
-- Long-lived documents only: decisions, tasks, execution prompts, reports, reviews, completed skill runbooks, and reference-project research notes.
+- Long-lived documents only: coordination docs, decisions, tasks, execution prompts, reports, reviews, completed skill runbooks, and reference-project research notes.
+
