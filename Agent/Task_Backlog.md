@@ -9,8 +9,8 @@
 - [x] 新建 UE C++ 项目。
 - [ ] 项目能编译。
 - [ ] 项目能 PIE。
-- [ ] 初始化 Git。
-- [ ] 提交 `Initial clean UE project`。
+- [x] 初始化 Git。
+- [x] 提交初始项目基线：`Initial Apex project baseline`。
 - [ ] 启用最小插件：GameplayAbilities、GameplayTasks、EnhancedInput、Niagara。
 - [ ] 提交 `Enable core gameplay plugins`。
 - [x] 生成 `.agents/ue-project-context.md`。
