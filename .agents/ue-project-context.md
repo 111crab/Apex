@@ -1,6 +1,6 @@
 ﻿# UE Project Context
 
-*Last updated: 2026-07-14*
+*Last updated: 2026-07-15*
 
 ## Engine & Project Overview
 
@@ -119,7 +119,7 @@
 - Phase 0 baseline is still in progress.
 - Git is initialized. Current observed branch is `master`.
 - `ApexEditor Win64 Development` compile has been verified after the Character cold start and `CameraSpringArm` rename.
-- PIE is not yet verified for the new `AApexPlayerCharacter` path.
+- PIE has been verified for the new `AApexPlayerCharacter` path: spawning, movement, jump, mouse look, SpringArm distance, and camera offset all work.
 - Active Agent coordination files now live under `Agent/00_Coordination/`; `Agent/README.md` is the root entry.
 
 **Important working constraints:**

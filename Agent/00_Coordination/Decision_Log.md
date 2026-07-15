@@ -151,3 +151,25 @@
 - 实施后审查看 `Agent/Reviews/`。
 - 长期决策、任务池、协作规则、工具指南都在 `Agent/00_Coordination/`。
 - 清理报告见 `Agent/Reports/2026-07-14_Agent_Structure_Cleanup_Report.md`。
+
+## 2026-07-15 - 第三方 Paragon 原始资产不进入普通 Git
+
+**决策：** `Content/ParagonPhase/` 作为本机安装的第三方内容包，不纳入 Apex 普通 Git 提交；项目自建蓝图、地图、配置资产仍需版本控制。
+
+**原因：** Paragon 原始资产体积大、可由资产来源重新安装；但项目自建资产承载角色配置和运行基线，必须进入仓库才能还原项目工作成果。
+
+**影响：**
+- `.gitignore` 明确排除 `/Content/ParagonPhase/`。
+- `BP_Hero_Phase` 等项目资产可以硬引用该内容包，但文档必须说明外部依赖。
+- 从 GitHub 拉取项目后，需要另行安装相同 Paragon Phase 资产才能完整显示角色。
+
+## 2026-07-15 - GAS RFC 前先做 Lyra 定向调研
+
+**决策：** Character 冷启动通过后，先针对 ASC 所有权、初始化生命周期、AbilitySet、InputTag 路由、Ability 激活关系和属性职责研究 Lyra，再编写 Apex GAS RFC。
+
+**原因：** 这些属于 GAS 基础架构的长期决策，若先写代码再补充成熟项目经验，容易重复 Aura 阶段的重构成本。
+
+**影响：**
+- Lyra 阅读是当前 GAS RFC 的明确前置，但不是对整个项目永久生效的重型前置阶段。
+- 第一轮只研究与 Apex 当前决策直接相关的源码，不完整复制 Experience 或 GameFeature。
+- 研究结论必须说明 Apex 采用完整版、轻量版或拒绝，并由用户确认后才能进入实施。

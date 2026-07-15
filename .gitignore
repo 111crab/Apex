@@ -30,3 +30,8 @@ Desktop.ini
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
 Plugins/*/Saved/
+
+# Locally installed third-party content packs
+# Project-authored assets may reference this pack, but the original marketplace
+# content is installed separately and is not stored in this repository.
+/Content/ParagonPhase/

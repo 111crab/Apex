@@ -1,6 +1,6 @@
 # 当前局部阶段
 
-生成日期：2026-07-14
+生成日期：2026-07-15
 维护规则：这是日常推进入口。它记录当前正在推进的小阶段、执行状态、下一步、待用户确认、人工操作、验证标准和 Git 建议；跨阶段待办放到 `Task_Backlog.md`；实施前代码设计放到 `Current_Code_Design.md`；实施后审阅放到 `Agent/Reviews/`。
 
 ## 当前顶层阶段
@@ -9,7 +9,7 @@ Phase 0.5 - 角色、Paragon 资产与第三人称基线。
 
 ## 当前局部阶段
 
-Character 冷启动：建立长期角色基类和玩家角色类。
+Character 冷启动：已完成。当前进入“基线资产收尾与 Lyra GAS 定向调研准备”。
 
 ## 本阶段目标
 
@@ -31,41 +31,32 @@ Character 冷启动：建立长期角色基类和玩家角色类。
 | Rider 项目文件 | 已通过 `Scripts/RegenerateProjectFiles.ps1` 重新生成 `Apex.sln` / `Apex.slnx`。 |
 | UE 人工操作清单 | 已写入 `Agent/00_Coordination/Current_UE_Manual_Steps.md`，后续同类操作每次覆盖。 |
 | Codex 审查 | 已完成初审：目录/导出宏/include 修正后编译通过；`CameraSpringArm` 改名后二次编译通过。审查见 `Agent/Reviews/2026-07-14_Character_ColdStart_Codex_Review.md`。 |
-| UE 人工配置 | 待用户决定 GameMode 策略后手动配置 `BP_Hero_Phase`。 |
-| PIE 验证 | 待人工配置完成后进行。 |
+| UE 人工配置 | 已完成 `BP_Hero_Phase`、InputAction、GameMode、SpringArm 与 Camera 配置。 |
+| PIE 验证 | 已通过：移动、跳跃、鼠标视角、SpringArm 距离和偏移均正常。 |
 
 ## 下一步任务
 
-1. 用户决定默认 Pawn 是先用现有模板 GameMode 临时指定，还是现在新建 Apex 专用 GameMode。
-2. 用户按 `Current_UE_Manual_Steps.md` 在 UE 编辑器中人工创建/配置 `BP_Hero_Phase`。
-3. PIE 验证基础移动、跳跃和鼠标视角。
-4. 阶段稳定后再考虑 commit。
+1. 提交 `BP_Hero_Phase`、测试地图、GameMode 改动及其必要外部 Actor；不提交 `Content/ParagonPhase/`。
+2. 用户提供本机 Lyra 源码根目录。
+3. Codex 按 `Agent/Research_Notes/Lyra_Reading_Plan.md` 完成第一轮 GAS 定向调研。
+4. 用户评审 Lyra 借鉴结论后，再进入 Apex GAS RFC。
+5. Phase 最小动画基线作为并行的小阶段处理，不阻塞 GAS 架构调研。
 
 ## 待用户确认
 
-当前阶段只剩以下确认点：
+当前待确认：
 
-- 是否现在由用户手动创建 `BP_Hero_Phase` 并绑定 Paragon Phase Mesh / AnimBP。
-- 默认 Pawn 是先用现有模板 GameMode 临时指定，还是现在新建 Apex 专用 GameMode。
-- Paragon Phase 是否仍作为第一名验证英雄。
-- Phase 自带 AnimBP 是否先直接复用，还是只绑定 Mesh 做僵硬移动验证。
+- 用户提供 Lyra 源码路径后，确认实际版本和源码范围。
+- `/Game/Blueprints/Input/Actions/IA_*` 是未引用的重复资产，本次不提交；后续由用户在 UE 中确认后删除。
+- Phase 最小动画基线采用 Paragon AnimBP 还是 Apex 自有 Locomotion AnimBP，稍后单独讨论。
 
 ## 人工 UE 编辑器操作草案
 
-确认 GameMode 策略后，预计需要手动做：
-
-1. 创建 `BP_Hero_Phase`，父类选择 `AApexPlayerCharacter`。
-2. 设置 Mesh 为 Paragon Phase 的 SkeletalMesh。
-3. 设置 Anim Class：第一轮可以为空或使用 Paragon 自带 AnimBP，目标先允许僵硬移动。
-4. 配置 `MoveAction`、`LookAction`、`MouseLookAction`、`JumpAction`。
-5. 确认 `AApexPlayerController` 的 MappingContext 仍负责添加输入上下文。
-6. 在 GameMode 或关卡 World Settings 中设置默认 Pawn 为 `BP_Hero_Phase`。
-
-实际步骤以 Codex 审查后的人工清单为准。
+Character 冷启动的人工操作已经完成。下一次进入 UE 人工配置前，由 Codex 覆盖 `Current_UE_Manual_Steps.md`。
 
 ## 验证标准草案
 
-第一轮成功标准：
+第一轮成功标准已全部满足：
 
 - `ApexEditor Win64 Development` 编译通过。
 - PIE 后生成玩家角色。
@@ -77,16 +68,11 @@ Character 冷启动：建立长期角色基类和玩家角色类。
 
 ## Git 建议
 
-当前不要急着提交。等用户命名审阅、UE 手动配置和 PIE 验证完成后再分组：
-
-- `docs:` Agent 组织和 Prompt 文档。
-- `character:` C++ 角色冷启动代码。
-- `assets:` UE 蓝图 / Paragon 配置资产。
-
-如果 UE 资产改动很多，需要先做工作区分类。
+下一次提交只纳入项目自建资产和对应文档。`Content/ParagonPhase/` 作为本地第三方依赖，不纳入普通 Git 提交。
 
 ## 风险
 
-- 当前工作区已有 `Source/Apex/Public/Character/`、`Source/Apex/Private/Character/`、`Content/ParagonPhase/` 等未跟踪内容，可能来自用户或 ClaudeCode；Codex 不应覆盖。
-- 新 C++ 文件直接添加后，Rider / UE 可能需要刷新项目文件或重新编译后才显示。
-- 如果 InputAction 没配置，代码必须安全跳过绑定或输出日志，不能崩溃。
+- `BP_Hero_Phase` 硬引用本地 Paragon Phase 资产；从 GitHub 拉取项目后，需要另行安装相同资产包才能完整显示角色。
+- 项目地图启用了外部 Actor/对象文件时，提交地图必须同时提交其必要的 `__ExternalActors__` / `__ExternalObjects__` 文件。
+- 后续技能输入不能继续无限增加 Character 的 InputAction 成员，应在 GAS RFC 中设计 `InputConfig + InputTag` 层。
+- 当前 `AApexPlayerCharacter::SetupPlayerInputComponent()` 缺少 `Super::SetupPlayerInputComponent()`；并入下一次 C++ 实施批次修复。
