@@ -6,11 +6,21 @@
 
 阅读 Lyra 的目的不是照搬，而是理解成熟 UE / GAS 项目的组织方式，再设计适合本项目规模的轻量版本。
 
+## 当前源码
+
+- 本机根目录：`D:\UnrealProject\LyraStarterGame`
+- 2026-07-15 已确认目录存在并可读取。
+
 ## 当前启动条件
 
-- 用户提供本机 Lyra 源码根目录。
 - Codex 先确认 Lyra 版本、模块结构与源码完整性。
 - 第一轮只读分析，不修改 Apex C++、蓝图或配置。
+
+## 当前状态
+
+- 第一轮定向源码研究已完成。
+- 研究报告：`Agent/Research_Notes/2026-07-15_Lyra_GAS_Architecture_Study.md`。
+- 当前等待用户审阅“采用 / 轻量化 / 暂不采用”结论，再进入 Apex GAS RFC。
 
 ## 第一轮核心问题
 

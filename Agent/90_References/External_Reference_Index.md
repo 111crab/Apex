@@ -10,6 +10,8 @@
 | --- | --- |
 | `UE_GAS_SkillGraph_Design_Document.md` | Aura 阶段已有的 GAS SkillGraph 参考方案，不能照搬。 |
 | `UE_GAS_SkillGraph_Design_Review.md` | Codex 对上述参考方案的评审。 |
+| `Lyra AbilitySystem 深度解析：GAS的正确打开方式 - 知乎.mhtml` | Lyra GAS 代码职责的二次分析；关键结论需与本地 Lyra 源码交叉核对。 |
+| `(7 封私信 _ 68 条消息) UF2025(Shanghai)——《漫威争锋》战斗系统架构实战：从GAS框架到客户端预测的完整落地方案 - 知乎.mhtml` | 漫威争锋技术分享的文章整理；用于借鉴配置分层、模板/Task、Timeline、Combat Entity 和编辑器思想，不复制 AAA 规模。 |
 
 ## Aura 原始外部文章
 

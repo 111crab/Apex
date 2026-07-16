@@ -2,7 +2,7 @@
 
 生成日期：2026-07-14
 来源：Aura `Agent/02_SkillSystem/` 多轮讨论与实现复盘。
-状态：用于 Apex 后续 RFC，不代表当前已经实施。
+状态：用于 Apex 后续 RFC，不代表当前已经实施。第 2-3 节是 Aura 阶段的历史提案，已由 `Agent/Research_Notes/2026-07-15_Skill_Framework_Extensibility_Synthesis.md` 校准；最新口径不追求一个万能配置或一个万能 RuntimeAbility。
 
 ## 1. 顶层方向
 
@@ -29,9 +29,9 @@ Apex 继续继承 Aura 阶段确认过的长期方向：
 
 它不应该因为每出现一个特殊技能，就在顶层继续加临时字段。
 
-## 3. RuntimeAbility 与 SkillTemplate 的边界
+## 3. RuntimeAbility 与 SkillTemplate 的边界（历史提案，待 RFC 重写）
 
-长期建议：
+Aura 阶段的建议曾是：
 
 ```text
 RuntimeAbility = GAS 生命周期入口
@@ -55,6 +55,14 @@ SkillTemplate 负责：
 - 后续更特殊的技能流程。
 
 普通技能优先“选择模板 + 填模板参数”，不要求编辑者手写一串 Steps。
+
+Apex 当前修订方向：
+
+- `UApexGameplayAbility` 作为公共 GAS 基类。
+- Projectile / Channel / Area 等流程模板优先考虑 GA 子类。
+- AbilityTask 负责可复用异步操作。
+- 特殊技能允许专用 GA、Task 或 CombatEntity 行为。
+- 若后续确需普通流程协调器，可以抽出，但不自造第二套 Ability 生命周期。
 
 ## 4. 战斗衍生物 CombatEntity
 

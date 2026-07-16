@@ -173,3 +173,85 @@
 - Lyra 阅读是当前 GAS RFC 的明确前置，但不是对整个项目永久生效的重型前置阶段。
 - 第一轮只研究与 Apex 当前决策直接相关的源码，不完整复制 Experience 或 GameFeature。
 - 研究结论必须说明 Apex 采用完整版、轻量版或拒绝，并由用户确认后才能进入实施。
+
+## 2026-07-15 - Git 以功能或小阶段为提交单位
+
+**决策：** Apex 默认按功能闭环或可验证的小阶段提交，不再为普通开发改动进行逐文件的重型分类和频繁提交。
+
+**原因：** Git 的目标是保留可恢复节点和支持协作，不能让版本管理成本压过架构、实现与验证本身。
+
+**影响：**
+- 提交前采用一次快速状态检查和范围暂存。
+- 仅对第三方大资产、生成目录、明显无关改动或来源不明内容进行额外分类。
+- Push 优先安排在当日结束、阶段完成或需要远端备份时。
+
+## 2026-07-15 - 技能框架不以万能配置或万能 GA 为目标
+
+**决策：** Apex 追求常见技能快速配置、局部机制可复用、特殊技能可自然扩展；不把“一个 DataAsset 配出所有技能”或“一个 GA 执行所有流程”当作架构成功标准。
+
+**原因：** 游戏技能差异不仅是数值和资源差异，还可能改变异步时序、预测方式、持续实体和跨系统交互。强行字段化会制造万能资产，强行统一 GA 会削弱 GAS 原生 AbilityTags 和生命周期边界。
+
+**影响：**
+- 公共差异优先使用模板配置。
+- 可复用异步行为使用 AbilityTask。
+- 生成后持续存在的机制归 CombatEntity / Effect / Buff 子系统。
+- 完全特殊的生命周期允许专用 GA，但仍复用公共基类和基建。
+- Step 暂时作为分析语言和未来有限 Timeline 概念，不实现任意 Step 解释器。
+- 详细分析见 `Agent/Research_Notes/2026-07-15_Skill_Framework_Extensibility_Synthesis.md`。
+
+## 2026-07-15 - Lyra GAS 第一轮基础取舍已确认
+
+**决策：** 用户确认第一轮 Lyra 研究的八项基础取舍，并要求在配置驱动与特殊扩展方式上继续讨论。
+
+**影响：**
+- 玩家 ASC 采用 PlayerState Owner / Pawn Avatar，AI ASC 由自身 Character 持有。
+- Native Tag 使用 `namespace ApexGameplayTags`，不创建项目 Tag 单例。
+- InputTag 由 AbilitySet / Loadout 分配，不作为 SkillDefinition 固定字段。
+- 采用轻量 ActivationPolicy、并发组和独立关系映射思想。
+- Experience、GameFeature、完整 ModularGameplay 初始化链暂不采用。
+- V1 使用标准 GameplayCueManager 和标准 EffectContext。
+- Spec-aware Policy 仅作为共享 GA 模板下的条件性扩展，V1 不提前实现。
+
+## 2026-07-15 - 技能框架采用三类验证样本
+
+**决策：** 架构验证采用“普通投射物 + 穿透/分裂局部变体 + 黑洞”。
+
+**原因：** 三者分别验证模板基础配置、同模板局部行为复用，以及 CombatEntity 持续机制与特殊交互边界。
+
+## 2026-07-15 - 建立 Apex 自有 AnimBP
+
+**决策：** Apex 将建立项目自有 AnimInstance / AnimBP，不把 Paragon Phase 原有 AnimBP 作为长期动画实现；Phase 动画素材继续复用。
+
+**影响：**
+- C++ AnimInstance 负责稳定状态缓存和后续 GAS Tag 桥接。
+- AnimBP 负责 Locomotion、姿势混合和 Montage Slot，不负责技能结算。
+- 第一版具体范围和命名仍需用户审阅。
+- 不同 Skeleton 仍需 Retarget 和对应的 AnimBP / Montage 资产，不能只靠替换配置跨骨骼复用。
+
+## 2026-07-15 - 下次 UE 操作切换项目自有 InputAction
+
+**决策：** `/Game/Blueprints/Input/Actions/IA_*` 是项目自有输入资产，保留并在下一次 UE 人工操作中切换使用。
+
+**影响：** 人工清单必须同时替换角色的 InputAction 引用和 Input Mapping Context 中的映射，避免角色监听新 IA、IMC 仍触发旧 IA。
+
+## 2026-07-15 - SkillDefinition 采用受约束的 FInstancedStruct 执行配置
+
+**决策：** Apex 的每个技能保留一个统一 `SkillDefinition` 根资产，模板特殊配置通过一个受约束的 `FInstancedStruct` 内联；该形态与漫威争锋演讲展示的 AbilityAsset + Inline AbilityConfig 更接近。
+
+**边界：**
+- 只有一个 ExecutionConfig，不允许任意 Fragment 数组。
+- Config 必须继承统一基结构，并与 GA 模板严格匹配。
+- 类型匹配由 Details 过滤、Data Validation 和运行时入口共同校验。
+- CombatEntity、Effect、Cue 和关系映射仍保持独立职责，不被内联结构吞并。
+- 借鉴配置形态，不复制漫威争锋的 AAA 规模、类名和完整管线。
+
+## 2026-07-16 - 项目自建 UE 资产统一放在 /Game/Blueprints
+
+**决策：** Apex 自行设计和创建的 UE 内容统一放在 `/Game/Blueprints/`；第三方原包保持各自目录，不直接修改。
+
+**当前落点：**
+- Phase 动画资产：`/Game/Blueprints/Characters/Phase/Animation/`。
+- 项目自有 InputAction：`/Game/Blueprints/Input/Actions/`。
+- 基础移动 Mapping Context：`/Game/Blueprints/Input/IMC_Apex_BaseMove`。
+
+**原因：** 让项目自建内容与 `/Game/ParagonPhase/`、模板内容和其他第三方资源保持清晰边界，便于 Git、迁移和后续替换。

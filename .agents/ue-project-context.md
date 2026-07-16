@@ -1,6 +1,6 @@
 ﻿# UE Project Context
 
-*Last updated: 2026-07-15*
+*Last updated: 2026-07-16*
 
 ## Engine & Project Overview
 
@@ -116,10 +116,11 @@
 - ClaudeCode: concrete code or batch execution under explicit Prompt, with implementation report
 
 **Current project phase:**
-- Phase 0 baseline is still in progress.
+- Character, third-person input/camera, and the Apex-owned Phase AnimBP/locomotion baseline are verified in PIE; the active phase is Apex GAS / skill-system RFC discussion.
 - Git is initialized. Current observed branch is `master`.
 - `ApexEditor Win64 Development` compile has been verified after the Character cold start and `CameraSpringArm` rename.
 - PIE has been verified for the new `AApexPlayerCharacter` path: spawning, movement, jump, mouse look, SpringArm distance, and camera offset all work.
+- PIE has also been verified for project-owned IA/`IMC_Apex_BaseMove`, `UApexAnimInstance`, `ABP_Apex_Phase`, Idle/Jog, active jump, walk-off falling, landing, and camera input.
 - Active Agent coordination files now live under `Agent/00_Coordination/`; `Agent/README.md` is the root entry.
 
 **Important working constraints:**

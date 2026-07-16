@@ -29,6 +29,8 @@ AApexPlayerCharacter::AApexPlayerCharacter()
 
 void AApexPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
 	// 尝试转换为 Enhanced Input Component
 	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
 	if (!EnhancedInputComponent)

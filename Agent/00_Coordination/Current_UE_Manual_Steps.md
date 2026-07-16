@@ -1,213 +1,441 @@
 # 当前 UE 编辑器人工操作清单
 
-生成日期：2026-07-15
+生成日期：2026-07-16
 
-维护规则：本文只记录当前这一步需要用户在 UE 编辑器中完成的操作。进入新的人工操作阶段时由 Codex 覆盖。
+维护规则：本文只记录当前这一轮需要用户在 Rider 和 UE 编辑器中完成的操作。进入新的人工操作阶段时由 Codex 覆盖。
 
 ## 当前目标
 
-完成 Phase 玩家角色的第一轮运行基线验收：
+完成 Phase 的 Apex 自有最小动画基线：
 
-- 统一角色蓝图命名。
-- 确认实际生成的是新的玩家角色类。
-- 验证移动、跳跃和鼠标视角。
-- 验证 `CameraSpringArm` 的距离与偏移确实控制当前相机。
-- 本轮允许角色保持参考姿势，不要求动画自然。
+- Rider 能识别新的 `UApexAnimInstance` C++ 文件。
+- 基础输入全部切换到项目自有 IA 和 `IMC_Apex_BaseMove`。
+- 创建 `BS_Apex_Phase_Locomotion` 和 `ABP_Apex_Phase`。
+- 验证 Idle、Jog、主动跳跃、走下平台、下落和落地。
+- 在 AnimGraph 中预留 `UpperBody` 与 `FullBody` Montage Slot。
 
-## 本轮不做
+本轮不接入 GAS、技能 Montage、GameplayEvent Notify、AimOffset、Foot IK 或锁定目标移动。
 
-- 不创建 AnimInstance C++ 类。
-- 不制作 Locomotion 状态机。
-- 不播放 Montage。
-- 不接入 GAS。
-- 不使用 MCP 执行这些少量编辑器操作。
+## 一、Rider 上线检查
 
-## 一、在 UE 内统一蓝图命名
-
-当前磁盘中实际存在的资产名是 `BP_Hera_Phase`，已确认统一改为 `BP_Hero_Phase`。
-
-1. 在 Content Browser 中打开 `/Game/Blueprints/Characters/`。
-2. 选中 `BP_Hera_Phase`。
-3. 按 `F2`，将它重命名为 `BP_Hero_Phase`。
-4. 保存资产。
-5. 不要在 Windows 文件资源管理器中直接重命名 `.uasset`，必须由 UE 编辑器处理资产引用。
-6. 如果目录中出现 Redirector，右键 `/Game/Blueprints/Characters/`，执行 `Fix Up Redirectors in Folder`。
-
-## 二、检查角色蓝图基础配置
-
-打开 `BP_Hero_Phase`。
-
-### 1. 父类
-
-在 `Class Settings` 中确认父类为：
-
-`AApexPlayerCharacter`
-
-如果不是，先停止后续操作并告诉 Codex 当前父类名称，不要自行随意改父类。
-
-### 2. 组件层级
-
-Components 面板应当能够看到以下关系：
+项目文件已经由 Codex 成功生成：
 
 ```text
-CapsuleComponent
-├─ Mesh
-└─ CameraSpringArm
-   └─ FollowCamera
+D:\UnrealProject\Apex\Apex.sln
+D:\UnrealProject\Apex\Apex.slnx
 ```
 
-重点确认：
+1. 如果 Rider 已打开旧 Solution，关闭后重新打开 `D:\UnrealProject\Apex\Apex.sln`，或使用 Rider 的 Reload Project/Solution。
+2. 确认能够看到：
 
-- `FollowCamera` 必须是 `CameraSpringArm` 的子组件。
-- 不要额外创建第二个 Camera 或 SpringArm。
+```text
+Source/Apex/Public/Animation/ApexAnimInstance.h
+Source/Apex/Private/Animation/ApexAnimInstance.cpp
+```
 
-### 3. Phase Mesh
+3. 确认类名为 `UApexAnimInstance`，父类为 `UAnimInstance`。
+4. 使用 `ApexEditor | Win64 | Development Editor` 构建配置。ClaudeCode 已完成一次成功编译；这里用于确认 Rider 使用的是刚生成的项目文件。
+5. 构建成功后再启动 UE 编辑器。
 
-1. 选中 `Mesh`。
-2. `Skeletal Mesh Asset` 选择 Paragon Phase 的角色 Skeletal Mesh。
-3. 调整 Mesh 的相对位置和旋转，使脚底大致位于 Capsule 底部，人物朝向与蓝图箭头方向一致。
-4. 本轮 `Anim Class` 可以保持为空，允许角色以参考姿势移动。
+如果 Rider 仍显示 `Automation_Apex`，说明打开的是旧 Solution。关闭它并明确打开 `D:\UnrealProject\Apex\Apex.sln`。
 
-如果当前已经绑定了能够正常工作的 Phase AnimBP，可以暂时保留，但本轮不把动画自然度作为验收条件。
+## 二、禁止修改的第三方资产
 
-## 三、填写四个 InputAction
+本轮只读取以下 Paragon Phase 资产，不移动、不重命名、不保存修改：
 
-打开 `BP_Hero_Phase` 的 `Class Defaults`，找到 Input 分类，填写：
+```text
+/Game/ParagonPhase/Characters/Heroes/Phase/Meshes/phase_Skeleton
+/Game/ParagonPhase/Characters/Heroes/Phase/Animations/Idle
+/Game/ParagonPhase/Characters/Heroes/Phase/Animations/Jog_Fwd
+/Game/ParagonPhase/Characters/Heroes/Phase/Animations/Jump_Start
+/Game/ParagonPhase/Characters/Heroes/Phase/Animations/Jump_Apex
+/Game/ParagonPhase/Characters/Heroes/Phase/Animations/Jump_Land
+```
 
-| 属性 | 资产 | Value Type |
+新建资产统一放入：
+
+```text
+/Game/Blueprints/
+```
+
+## 三、确认项目自有 InputAction
+
+打开 `/Game/Blueprints/Input/Actions/`，确认四个资产存在并检查 `Value Type`：
+
+| 资产 | Value Type |
+| --- | --- |
+| `IA_Jump` | Digital / Bool |
+| `IA_Move` | Axis2D |
+| `IA_Look` | Axis2D |
+| `IA_MouseLook` | Axis2D |
+
+如果类型不一致，先修改并保存。不要重新创建第二套同名资产。
+
+## 四、创建 IMC_Apex_BaseMove
+
+### 1. 创建资产
+
+1. 打开 `/Game/Blueprints/Input/`。
+2. 右键空白处，选择 `Input -> Input Mapping Context`。
+3. 命名为 `IMC_Apex_BaseMove`。
+4. 打开该资产，在 `Mappings` 中添加以下映射。
+
+### 2. 跳跃
+
+| InputAction | Key | Modifiers |
 | --- | --- | --- |
-| `JumpAction` | `/Game/Input/Actions/IA_Jump` | Boolean |
-| `MoveAction` | `/Game/Input/Actions/IA_Move` | Axis2D |
-| `LookAction` | `/Game/Input/Actions/IA_Look` | Axis2D |
-| `MouseLookAction` | `/Game/Input/Actions/IA_MouseLook` | Axis2D |
+| `IA_Jump` | `Space Bar` | 无 |
+| `IA_Jump` | `Gamepad Face Button Bottom` | 无 |
 
-注意：
+### 3. 键盘移动
 
-- 角色蓝图只引用 InputAction，不在这里填写 IMC。
-- `AApexPlayerCharacter::SetupPlayerInputComponent` 负责把四个 InputAction 绑定到角色函数。
-- `BP_ThirdPersonPlayerController` 负责把 Input Mapping Context 添加到本地玩家。
+`IA_Move` 是 `Axis2D`，C++ 约定 `X=Right`、`Y=Forward`：
 
-## 四、检查 PlayerController 的 Mapping Context
+| InputAction | Key | Modifiers 与顺序 | 输出 |
+| --- | --- | --- | --- |
+| `IA_Move` | `W` | `Swizzle Input Axis Values`，Order=`YXZ` | Y=+1 |
+| `IA_Move` | `S` | `Negate`，然后 `Swizzle Input Axis Values`，Order=`YXZ` | Y=-1 |
+| `IA_Move` | `A` | `Negate` | X=-1 |
+| `IA_Move` | `D` | 无 | X=+1 |
+| `IA_Move` | `Gamepad Left Thumbstick 2D-Axis` | 无 | X/Y |
 
-打开：
+注意：`W/S` 必须使用 `Swizzle` 把键盘按键默认的 X 轴值转换到 Y 轴。否则 W/S 会被识别成左右移动。
 
-`/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController`
+### 4. 视角
 
-在 Class Defaults 中确认：
+| InputAction | Key | Modifiers |
+| --- | --- | --- |
+| `IA_MouseLook` | `Mouse XY 2D-Axis` | `Negate`，只启用 Y，X/Z 关闭 |
+| `IA_Look` | `Gamepad Right Thumbstick 2D-Axis` | 无 |
 
-| 属性 | 应包含的资产 |
+当前 Phase 基线已验证鼠标垂直方向需要取反。只修改 `IA_MouseLook -> Mouse XY` 这一条映射，不修改 C++ `DoLook()`，也不要反转 X。
+
+保存 `IMC_Apex_BaseMove`。
+
+## 五、切换角色和 PlayerController 输入引用
+
+### 1. BP_Hero_Phase
+
+打开 `/Game/Blueprints/Characters/BP_Hero_Phase`，进入 `Class Defaults -> Input`：
+
+| 属性 | 设置为 |
 | --- | --- |
-| `Default Mapping Contexts` | `/Game/Input/IMC_Default` |
-| `Mobile Excluded Mapping Contexts` | `/Game/Input/IMC_MouseLook` |
+| `JumpAction` | `/Game/Blueprints/Input/Actions/IA_Jump` |
+| `MoveAction` | `/Game/Blueprints/Input/Actions/IA_Move` |
+| `LookAction` | `/Game/Blueprints/Input/Actions/IA_Look` |
+| `MouseLookAction` | `/Game/Blueprints/Input/Actions/IA_MouseLook` |
 
-当前模板代码会在本地 PlayerController 初始化输入时添加这些 Mapping Context。这里不需要在角色蓝图的 Event Graph 中再次调用 `Add Mapping Context`。
+编译并保存。
 
-## 五、设置当前测试关卡和 GameMode
+### 2. BP_ThirdPersonPlayerController
 
-1. 打开 `/Game/Blueprints/Maps/Lvl_ThirdPerson`。
-2. 打开 `World Settings`。
-3. 将 `GameMode Override` 设置为 `/Game/ThirdPerson/Blueprints/BP_ThirdPersonGameMode`。
-4. 打开 `BP_ThirdPersonGameMode`，确认：
-   - `Default Pawn Class` = `BP_Hero_Phase`
-   - `Player Controller Class` = `BP_ThirdPersonPlayerController`
-5. 确认关卡中存在一个 `PlayerStart`。
-6. 检查关卡里是否手动放置了旧玩家角色；如果存在且设置了 `Auto Possess Player = Player 0`，先把该项改为 `Disabled`，避免它抢占控制权。
+打开 `/Game/ThirdPerson/Blueprints/BP_ThirdPersonPlayerController`，进入 `Class Defaults -> Input -> Input Mappings`：
 
-本轮继续复用现有 `BP_ThirdPersonGameMode`。等角色基线验收完成后，再决定是否建立长期的 Apex 专用 GameMode 资产。
-
-## 六、设置和验证相机
-
-在 `BP_Hero_Phase` 中选中 `CameraSpringArm`。
-
-### 1. 先做明显变化测试
-
-先临时填写：
-
-| 参数 | 测试值 |
+| 属性 | 设置 |
 | --- | --- |
-| `Target Arm Length` | `120` |
-| `Socket Offset` | `X=0, Y=80, Z=40` |
+| `Default Mapping Contexts` | 只保留一个元素：`IMC_Apex_BaseMove` |
+| `Mobile Excluded Mapping Contexts` | 清空 |
+| `Force Touch Controls` | `false` |
 
-编译、保存蓝图并进入 PIE。画面应明显拉近并产生侧向偏移。
+不要在 Character 或关卡蓝图中再次调用 `Add Mapping Context`。当前 `AApexPlayerController` 会为本地玩家统一添加这里配置的 IMC。
 
-如果完全没有变化，优先检查：
+## 六、创建动画目录
 
-1. PIE 实际生成的是否为 `BP_Hero_Phase`。
-2. 当前 View Target 是否使用该角色的 `FollowCamera`。
-3. `FollowCamera` 是否确实挂在 `CameraSpringArm` 下。
-4. 是否编译并保存了蓝图。
+在 Content Browser 中创建：
 
-### 2. 测试通过后使用临时基线值
+```text
+/Game/Blueprints/Characters/Phase/Animation/
+```
 
-结束 PIE，将参数暂时调整为：
+本轮创建的 `BS_Apex_Phase_Locomotion` 与 `ABP_Apex_Phase` 都放在这里。
 
-| 参数 | 基线值 |
+## 七、创建 BS_Apex_Phase_Locomotion
+
+1. 在 `/Game/Blueprints/Characters/Phase/Animation/` 右键。
+2. 选择 `Animation -> Blend Space 1D`。
+3. Skeleton 选择 `phase_Skeleton`。
+4. 命名为 `BS_Apex_Phase_Locomotion`。
+5. 打开后确认 `Axis Settings` 只有 `Horizontal Axis`。如果同时出现可配置的 `Vertical Axis`，说明误建成了二维 `Blend Space`，应删除这个新资产并重新创建 `Blend Space 1D`。
+6. 打开 BlendSpace，在 Asset Details 中配置水平轴：
+
+| 设置 | 值 |
 | --- | --- |
-| `Target Arm Length` | `260` |
-| `Socket Offset` | `X=0, Y=70, Z=35` |
-| `Target Offset` | `X=0, Y=0, Z=40` |
-| `FollowCamera.Field Of View` | `85` |
+| Axis Name | `GroundSpeed` |
+| Minimum Axis Value | `0` |
+| Maximum Axis Value | `500` |
+| Number of Grid Divisions | `5` |
+| Smoothing Time | `0.15` |
 
-这些只是原型观察值，后续可以根据技能瞄准方式重新调整。
+7. 在编辑器下方的 `Blend Graph` 网格中，将 Phase 的 `Idle` 放到 `0`。
+8. 将 Phase 的 `Jog_Fwd` 放到 `500`。
+9. 拖动绿色预览点检查：0 时为 Idle，接近 500 时为 Jog，中间平滑混合。
+10. 保存资产。
 
-不要用 `CameraSpringArm.Relative Rotation` 判断相机链路是否生效。C++ 已开启 `Use Pawn Control Rotation`，运行时 SpringArm 旋转主要由 PlayerController 的 Control Rotation 驱动。
+这个 BlendSpace 只决定显示哪种姿势，不会改变 CharacterMovement 的真实速度。
 
-## 七、PIE 验收
+## 八、创建 ABP_Apex_Phase
 
-编译并保存所有相关蓝图后进入 PIE，逐项验证：
+1. 在 `/Game/Blueprints/Characters/Phase/Animation/` 右键。
+2. 选择 `Animation -> Animation Blueprint`。
+3. Target Skeleton 选择 `phase_Skeleton`。
+4. Parent Class 选择 `UApexAnimInstance`。
+5. 命名为 `ABP_Apex_Phase`。
 
-### 1. 生成与控制
+如果创建窗口没有 Parent Class 选项：
 
-- World Outliner 中实际玩家 Pawn 的类是 `BP_Hero_Phase`。
-- PlayerController 已 Possess 该角色。
-- 场景中没有第二个 Pawn 抢占 `Player 0`。
+1. 先使用 `AnimInstance` 创建。
+2. 打开 AnimBP，进入 `Class Settings`。
+3. 将 `Parent Class` 改为 `UApexAnimInstance`。
+4. Compile，确认没有父类或 Skeleton 错误。
 
-### 2. 输入
+`EventGraph` 保持为空。不要添加 `Event Blueprint Update Animation`、`Try Get Pawn Owner` 或每帧 Cast；`GroundSpeed` 等状态已经由 C++ 父类计算。
 
-- `W/S`：按当前摄像机 yaw 的前后方向移动。
-- `A/D`：按当前摄像机 yaw 的左右方向移动。
-- 鼠标横向：改变视角 yaw。
-- 鼠标纵向：改变视角 pitch。
-- Space：起跳；松开后正常结束跳跃输入。
+### 显示 C++ 父类变量
 
-### 3. 相机
+1. 先打开 `Class Settings`，再次确认 `Parent Class = UApexAnimInstance`；如果仍是 `AnimInstance`，继承变量不会出现。
+2. Compile 一次 AnimBP。
+3. 在左侧 `My Blueprint` 面板打开齿轮或 View Options，勾选 `Show Inherited Variables`。
+4. 在 Variables 中展开 `Animation|Locomotion`，或搜索蓝图友好名称：
 
-- `Target Arm Length = 120` 的明显测试能改变距离。
-- `Socket Offset` 能产生明显侧向偏移。
-- 恢复基线值后视角距离合理。
-- 相机靠近墙体时可以正常回缩，没有脱离角色。
+```text
+Ground Speed
+Vertical Speed
+Has Acceleration
+Is Falling
+```
 
-### 4. 稳定性
+C++ 名称 `GroundSpeed` 在蓝图界面中通常显示为 `Ground Speed`。这些变量是 `BlueprintReadOnly`，可以作为 Get 节点读取，但不能在 AnimBP 中 Set。
+
+## 九、创建 Locomotion 状态机
+
+### 1. 建立状态机
+
+1. 在 `ABP_Apex_Phase` 的 AnimGraph 中添加 `State Machine`。
+2. 命名为 `Locomotion`。
+3. 双击进入，创建四个状态：
+
+```text
+Grounded
+JumpStart
+Falling
+Land
+```
+
+4. `Entry` 连接到 `Grounded`。
+
+### 2. Grounded
+
+1. 双击 `Grounded`。
+2. 添加 `BS_Apex_Phase_Locomotion` BlendSpace Player。
+3. 从 `My Blueprint` 将继承变量 `Ground Speed` 拖入图中并选择 `Get`，连接到 BlendSpace 的 `GroundSpeed` 输入。
+4. 将输出连接到 State Result。
+
+### 3. JumpStart
+
+1. 双击 `JumpStart`。
+2. 添加 `Jump_Start` Sequence Player。
+3. 关闭 `Loop Animation`。
+4. 连接到 State Result。
+
+### 4. Falling
+
+1. 双击 `Falling`。
+2. 添加 `Jump_Apex` Sequence Player。
+3. 关闭 `Loop Animation`；该动画播放结束后保持最后一帧，避免在较长滞空中反复播放 Apex 动作。
+4. 连接到 State Result。
+
+### 5. Land
+
+1. 双击 `Land`。
+2. 添加 `Jump_Land` Sequence Player。
+3. 关闭 `Loop Animation`。
+4. 连接到 State Result。
+
+## 十、配置状态转换
+
+在状态机中创建并配置以下转换箭头。变量来自 `UApexAnimInstance`，在蓝图中可能显示为空格友好名，例如 `Is Falling`、`Vertical Speed`。
+
+### 1. Grounded -> JumpStart
+
+```text
+bIsFalling AND VerticalSpeed > 0
+```
+
+用途：Space 主动起跳时先播放起跳动画。
+
+### 2. Grounded -> Falling
+
+```text
+bIsFalling AND VerticalSpeed <= 0
+```
+
+用途：角色直接走下平台时跳过 JumpStart，避免播放主动蹬地动作。
+
+### 3. JumpStart -> Falling
+
+```text
+VerticalSpeed <= 0
+OR
+Get Relevant Anim Time Remaining Fraction (JumpStart) <= 0.1
+```
+
+用途：开始下降，或者起跳动画即将结束时进入空中姿势。
+
+### 4. Falling -> Land
+
+```text
+NOT bIsFalling
+```
+
+用途：CharacterMovement 再次接触可行走地面时播放落地动画。
+
+### 5. Land -> Grounded
+
+```text
+Get Relevant Anim Time Remaining Fraction (Land) <= 0.1
+```
+
+用途：落地动画即将结束时恢复 Idle/Jog BlendSpace。
+
+### 6. 建议 Crossfade Duration
+
+| 转换 | Duration |
+| --- | --- |
+| Grounded -> JumpStart | `0.05` |
+| Grounded -> Falling | `0.10` |
+| JumpStart -> Falling | `0.10` |
+| Falling -> Land | `0.05` |
+| Land -> Grounded | `0.10` |
+
+这些是冷启动观察值，不是最终动画手感参数。
+
+## 十一、搭建 AnimGraph 输出和 Montage Slot 预留
+
+目标结构：
+
+```text
+Locomotion State Machine
+-> Save Cached Pose "LocomotionPose"
+-> UpperBody 分层
+-> FullBody Slot
+-> Output Pose
+```
+
+按以下方式连接，避免把卡槽错误地串成两个全身覆盖：
+
+1. 将 `Locomotion` State Machine 输出连接到 `Save Cached Pose`，名称填写 `LocomotionPose`。
+2. 添加第一个 `Use Cached Pose: LocomotionPose`，连接到 `Layered Blend Per Bone` 的 `Base Pose`。
+3. 添加第二个 `Use Cached Pose: LocomotionPose`，连接到一个 `Slot` 节点的 Source。
+4. 将这个 Slot 设置为 `UpperBody`，再把它的输出连接到 `Layered Blend Per Bone` 的 `Blend Pose 0`。
+5. 在 `Layered Blend Per Bone -> Layer Setup[0] -> Branch Filters[0]` 中设置：
+
+| 设置 | 值 |
+| --- | --- |
+| Bone Name | `spine_01` |
+| Blend Depth | `0` |
+| Blend Weight 0 | `1.0` |
+
+6. 将 `Layered Blend Per Bone` 输出连接到第二个 Slot 节点。
+7. 将第二个 Slot 设置为 `FullBody`。
+8. 将 `FullBody` Slot 输出连接到 `Output Pose`。
+9. Compile 并保存。
+
+`phase_Skeleton` 已确认包含 `UpperBody` 和 `FullBody` 名称。本轮只在 AnimBP 中引用，不打开 Skeleton Slot Manager 修改第三方 Skeleton。
+
+当前没有技能 Montage 时，两个 Slot 都会原样传递 Locomotion 姿势，不应改变基础移动表现。
+
+## 十二、绑定 BP_Hero_Phase 的 Anim Class
+
+1. 打开 `/Game/Blueprints/Characters/BP_Hero_Phase`。
+2. 选中 `Mesh`。
+3. `Animation Mode` 设置为 `Use Animation Blueprint`。
+4. `Anim Class` 设置为 `ABP_Apex_Phase`。
+5. Compile 并保存。
+
+不要改变已经验证通过的 Mesh 相对变换、Capsule、CameraSpringArm 或 FollowCamera 参数。
+
+## 十三、编译检查
+
+依次打开并 Compile/Save：
+
+1. `BS_Apex_Phase_Locomotion` 保存。
+2. `ABP_Apex_Phase` Compile/Save。
+3. `IMC_Apex_BaseMove` 保存。
+4. `BP_Hero_Phase` Compile/Save。
+5. `BP_ThirdPersonPlayerController` Compile/Save。
+
+AnimBP 必须为绿色编译成功状态。若出现错误，不要带着错误进入 PIE。
+
+## 十四、PIE 验证
+
+使用已经验证过的 `/Game/Blueprints/Maps/Lvl_ThirdPerson` 和现有 GameMode 进入 PIE。
+
+### 1. 输入回归
+
+- W/S 沿相机朝向前后移动。
+- A/D 沿相机朝向左右移动。
+- 鼠标控制视角。
+- Space 正常起跳。
+- 不应出现按一次按键触发两次的情况。
+
+### 2. 地面动画
+
+- 静止时播放 Idle。
+- 开始移动后平滑过渡到 Jog_Fwd。
+- 停止移动后平滑返回 Idle。
+- 角色真实最大速度仍为 500 左右；BlendSpace 不应改变移动速度。
+
+### 3. 主动跳跃
+
+- Space 后进入 `JumpStart`。
+- 起跳动画结束或开始下降后进入 `Falling`。
+- 接触地面后进入 `Land`。
+- Land 结束后回到 `Grounded`。
+
+### 4. 走下平台
+
+- 不按 Space，直接从平台边缘走下。
+- 应从 `Grounded` 直接进入 `Falling`。
+- 不应误播 `JumpStart`。
+- 落地后正常播放 `Land`。
+
+### 5. AnimBP 调试
+
+PIE 运行时打开 `ABP_Apex_Phase`：
+
+1. 在顶部 `Debug Filter` 选择当前运行中的 `BP_Hero_Phase` 实例。
+2. 打开 `Locomotion` 状态机，观察当前状态的高亮流转。
+3. 检查 `GroundSpeed`：静止接近 0，跑动接近 500。
+4. 检查 `VerticalSpeed`：起跳为正，下降为负。
+5. 检查 `bIsFalling`：离地时为 true，落地后为 false。
+
+### 6. 稳定性
 
 - PIE 不崩溃。
-- Output Log 中没有 InputAction 为空、Enhanced Input 绑定失败或空指针错误。
-- 本轮不要求待机、跑步、跳跃动画自然。
+- Output Log 中没有 AnimInstance Owner、MovementComponent 或 Enhanced Input 空引用错误。
+- 相机距离、偏移和鼠标视角保持上一轮已验证结果。
 
-## 八、失败时如何反馈
+## 十五、失败时反馈格式
 
-如果某项失败，请不要一次改动多个地方。按下面格式告诉 Codex：
-
-```text
-失败项：例如鼠标不能转动视角
-实际 Pawn 类：
-实际 PlayerController 类：
-BP_Hero_Phase 四个 InputAction 是否均非空：
-CameraSpringArm 测试值是否能改变画面：
-Output Log 相关警告或错误：
-```
-
-## 九、通过后如何反馈
-
-全部通过后，直接回复：
+一次只定位一个问题，不要同时修改多个转换或输入映射。按下面格式告诉 Codex：
 
 ```text
-Phase 角色基线验证通过：移动、跳跃、鼠标视角、SpringArm 距离和偏移均正常。
+失败步骤：
+实际现象：
+ABP_Apex_Phase 是否编译成功：
+PIE Debug Filter 中的当前状态：
+GroundSpeed：
+VerticalSpeed：
+bIsFalling：
+相关 Output Log：
 ```
 
-Codex 收到后将：
+## 十六、通过后反馈
 
-1. 更新 `Current_Phase.md`，关闭 Character 冷启动阶段。
-2. 区分项目自建资产与第三方 Paragon 资产。
-3. 建议提交 `BP_Hero_Phase`、项目测试地图及其必要外部 Actor 文件。
-4. 保持 `Content/ParagonPhase/` 不提交，并记录其为本地第三方依赖。
-5. 开始规划 Phase 的最小动画基线。
+全部通过后回复：
+
+```text
+Phase 动画基线验证通过：项目自有 IA/IMC、Idle/Jog、主动跳跃、走下平台、Falling、Land 和相机输入均正常。
+```
+
+收到结果后，Codex 将关闭当前动画冷启动阶段，并返回 Apex GAS 基础 RFC 与第一批技能框架设计。
