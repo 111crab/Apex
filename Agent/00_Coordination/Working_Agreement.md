@@ -26,7 +26,7 @@
 
 ## Prompt 规则
 
-ClaudeCode Prompt 必须包含：
+标准任务和架构任务需要 ClaudeCode Prompt；快速任务默认由 Codex 直接实施，不单独创建 Prompt。需要 Prompt 时必须包含：
 
 - 目标。
 - 明确范围。
@@ -37,6 +37,33 @@ ClaudeCode Prompt 必须包含：
 - 编译 / PIE / 多人验证要求。
 - 失败时必须输出人工操作清单。
 - 不允许把未验证结果写成完成。
+
+## 任务分级与轻量化流程
+
+### 快速任务
+
+适用于文件移动、include / 导出宏修正、少量明确 Bug 修复等机械改动，通常不超过 4 个文本文件，且不涉及新架构、反射字段重命名、UE 资产、网络或 GAS 生命周期。
+
+流程：聊天中给出简短范围并经用户确认后，由 Codex 直接修改、检查和编译，再在聊天中汇报。默认不更新 `Current_Code_Design.md`，不创建 Prompt、Report 或 Review；只在完成后按需简要更新 `Current_Phase.md`。
+
+### 标准任务
+
+适用于新增一个或少量 C++ 类、修改运行时行为、输入、动画或单个功能闭环。
+
+流程：维护一份精简 `Current_Code_Design.md`，由 ClaudeCode 按短 Prompt 实施并写一份中文报告，Codex 在聊天中审查。只有出现重要风险、偏差或需要长期追踪的问题时才新增 Review 文档。
+
+### 架构任务
+
+适用于 GAS 基础、ASC 生命周期、GameplayTag 规范、SkillDefinition、网络预测和跨系统边界。
+
+流程：先讨论并形成 RFC / 长期决策，再写代码设计、实施 Prompt、报告和必要的正式 Review。
+
+### 去重原则
+
+- Prompt 引用 `Working_Agreement.md` 和 `Subagent_Review_Checklist.md`，不重复粘贴全部通用规则。
+- `Current_Phase.md` 只保留当前目标、状态、下一步、待确认和验证入口，历史细节进入 Report / Review / Decision Log。
+- `Current_Code_Design.md` 只服务当前标准或架构实施批次；快速任务不占用它。
+- 同一信息只维护一个权威入口，避免在 Phase、Prompt、Report 和 Review 中重复展开。
 
 ## MCP 使用规则
 
@@ -65,7 +92,7 @@ MCP 结果必须通过 UE 编辑器验证。
 阶段完成必须满足对应验证：
 
 - C++ 改动：至少编译通过。
-- 新增、移动、删除或重命名 `.h/.cpp` 后：先完成代码审查；在用户 review 通过、即将进入 UE/Rider 手动配置前，运行 `Scripts/RegenerateProjectFiles.ps1`。
+- 新增、移动、删除或重命名 `.h/.cpp` 后：先完成代码审查；在用户 review 通过、即将进入 UE/Rider 手动配置前，由用户默认运行 `Scripts/RegenerateProjectFiles.ps1`。Codex 只负责提醒，除非用户明确要求代为执行。
 - 运行时改动：至少单人 PIE 验证。
 - 多人相关能力：Listen Server + Client 验证。
 - UE 资产改动：编辑器可见、可打开、可保存。
@@ -101,7 +128,7 @@ Lyra、学习包、示例项目和第三方实现不是默认阅读材料。
 - Codex 审查时优先看是否符合 Prompt、是否符合 UE/GAS 生命周期、是否有资产副作用、验证是否足够。
 - 正式 C++ 代码要服务学习：非显然生命周期、权威/预测/复制边界、解耦原因、阶段性折中需要写有价值的注释或中文文档。
 - 可以直接新增 `.h` / `.cpp` 文件，不强制通过 UE 编辑器添加类向导；但必须保证反射宏、`.generated.h`、模块依赖和编译验证正确。
-- 直接新增、移动、删除或重命名 `.h` / `.cpp` 后，不在中途频繁刷新项目文件；等用户 review 通过、准备进入 UE/Rider 手动配置时，再统一重新生成项目文件。
+- 直接新增、移动、删除或重命名 `.h` / `.cpp` 后，不在中途频繁刷新项目文件；等用户 review 通过、准备进入 UE/Rider 手动配置时，再由用户统一重新生成项目文件。Codex 不主动代为运行。
 - 需要用户审核、讨论、决策的文档尽量使用中文。
 - 新增核心类名、关键成员变量、GameplayTag、重要资产命名时，先列命名表给用户审阅。
 

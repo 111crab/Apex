@@ -1,257 +1,439 @@
 # 当前代码设计预案
 
-生成日期：2026-07-16
-状态：用户已批准，等待子代理实施。
-维护规则：本文只记录当前实施批次的事前设计。子代理实施后的新增、偏离和问题进入 `Agent/Reviews/`，不回填成事前决定。
+更新日期：2026-07-23
+状态：已实施，并通过编译、单人和多人 PIE 运行验证。
 
-## 当前设计主题
+## 任务
 
-Apex 自有 AnimInstance 与 Phase 最小 Locomotion 动画基线。
-
-## 1. 本批目标
-
-建立一条项目自有、可以被后续英雄复用的动画状态数据链：
+一次完成 Apex 最小技能定义、AbilitySet 授予和 Ability 输入路由：
 
 ```text
-AApexCharacterBase / CharacterMovement
--> UApexAnimInstance（C++ 状态翻译层）
--> ABP_Apex_Phase（可视化动画图）
--> BS_Apex_Phase_Locomotion / Locomotion 状态机
--> Phase SkeletalMesh Pose
+InputAction
+    -> InputTag
+    -> AbilitySpec
+    -> UApexGameplayAbility
+    -> SkillDefinition
 ```
 
-本批成功后，Phase 应具备：
+本批建立正确的长期引用方向，但只做最小运行闭环，不实现具体技能模板。
 
-- Idle 与前向 Jog 的平滑过渡。
-- 主动跳跃、走下边缘、下落和落地动画。
-- 保留 `UpperBody` / `FullBody` Montage Slot 接入位置。
-- 继续支持现有移动、跳跃和鼠标视角。
-- Character 与 IMC 均切换到项目自有 InputAction。
-
-## 2. 本批不做
-
-- 不接入 ASC、GameplayTag 或 `FGameplayTagBlueprintPropertyMap`。
-- 不播放技能 Montage，不添加 GameplayEvent Notify。
-- 不实现 AimOffset、Turn In Place、Foot IK、Motion Matching。
-- 不实现锁定目标或 Strafe 移动模式。
-- 不创建通用 AnimationProfile DataAsset 或 Linked Anim Layer 选择系统。
-- 不使用 MCP 创建这批少量 UE 资产。
-- 不移动或修改 `Content/ParagonPhase/` 原始第三方资产。
-
-## 3. C++ 文件与类
-
-### 3.1 新增文件
-
-| 文件 | 作用 | 审阅状态 |
-| --- | --- | --- |
-| `Source/Apex/Public/Animation/ApexAnimInstance.h` | 对外可见的 AnimInstance 基类声明。 | 已确认 |
-| `Source/Apex/Private/Animation/ApexAnimInstance.cpp` | 状态缓存实现。 | 已确认 |
-
-### 3.2 类设计
-
-| 类名 | 父类 | 职责 | 审阅状态 |
-| --- | --- | --- | --- |
-| `UApexAnimInstance` | `UAnimInstance` | 将 CharacterMovement 的运行状态整理成 AnimBP 可读取的稳定变量；未来再桥接 GAS Tag。 | 已确认 |
-
-建议声明：
+## 架构边界
 
 ```text
-UCLASS(Transient, Blueprintable)
-class APEX_API UApexAnimInstance : public UAnimInstance
+未来 HeroDefinition
+    -> AbilitySet：角色获得哪些技能、等级和输入槽
+        -> SkillDefinition：单个技能使用哪个 GA 模板
+            -> UApexGameplayAbility：所有 Apex GA 的根基类
+                -> 未来 Projectile / Channel / Area 等模板
 ```
 
-`Transient` 表示运行时实例不作为持久资产保存；`Blueprintable` 允许 `ABP_Apex_Phase` 以它为父类。
+- `UApexGameplayAbility` 不是万能 GA，只提供项目公共能力。
+- `UApexSkillDefinition` 是单个技能的根配置资产。
+- `UApexAbilitySet` 是面向 ASC 的只读授予清单，不保存运行时状态。
+- InputTag 属于 AbilitySet 的装配上下文，不属于 SkillDefinition。
+- AbilitySet 第一版只授予 GA；GE、动态 AttributeSet 后续按真实需求追加。
+- AbilityTask、CombatEntity、Effect、Cue 和模板专属 `FInstancedStruct` 配置仍按既有 RFC 后续实现。
 
-本批只依赖现有 `Engine` 模块，不修改 `Apex.Build.cs`。
+## 文件
 
-## 4. C++ 成员变量
-
-### 4.1 内部引用
-
-| 变量 | 类型 | 可见性 | 作用 | 审阅状态 |
-| --- | --- | --- | --- | --- |
-| `OwningCharacter` | `TObjectPtr<ACharacter>` | Private, Transient | 缓存 `TryGetPawnOwner()` 的角色。 | 已确认 |
-| `CharacterMovementComponent` | `TObjectPtr<UCharacterMovementComponent>` | Private, Transient | 缓存角色移动组件，避免 AnimBP 每帧重复查询。 | 已确认 |
-
-使用 `ACharacter` 而不是 `AApexPlayerCharacter`，使 AI、敌人和其他 `ACharacter` 也能复用该 AnimInstance。
-
-### 4.2 AnimBP 只读状态
-
-| 变量 | 类型 | 计算方式 | AnimBP 用途 | 审阅状态 |
-| --- | --- | --- | --- | --- |
-| `GroundSpeed` | `float` | `Velocity.Size2D()` | 驱动 1D Locomotion BlendSpace。 | 已确认 |
-| `VerticalSpeed` | `float` | `Velocity.Z` | 区分上升跳跃与直接下落。 | 已确认 |
-| `bHasAcceleration` | `bool` | 当前加速度二维长度是否大于容差 | 后续区分移动输入与惯性滑动；本批可用于调试。 | 已确认 |
-| `bIsFalling` | `bool` | `CharacterMovementComponent->IsFalling()` | 驱动 Grounded / Jump / Falling / Land 转换。 | 已确认 |
-
-这些变量使用：
+新增：
 
 ```text
-UPROPERTY(Transient, BlueprintReadOnly, Category="Animation|Locomotion")
+Source/Apex/Public/GameplayTags/ApexGameplayTags.h
+Source/Apex/Private/GameplayTags/ApexGameplayTags.cpp
+
+Source/Apex/Public/AbilitySystem/Abilities/ApexGameplayAbility.h
+Source/Apex/Private/AbilitySystem/Abilities/ApexGameplayAbility.cpp
+
+Source/Apex/Public/AbilitySystem/Data/ApexSkillDefinition.h
+Source/Apex/Private/AbilitySystem/Data/ApexSkillDefinition.cpp
+
+Source/Apex/Public/AbilitySystem/ApexAbilitySet.h
+Source/Apex/Private/AbilitySystem/ApexAbilitySet.cpp
+
+Source/Apex/Public/Input/ApexAbilityInputConfig.h
+Source/Apex/Private/Input/ApexAbilityInputConfig.cpp
 ```
 
-本批不添加 `MovementDirection`。当前角色启用 `bOrientRotationToMovement=true`，人物会朝向移动方向，方向变量对 1D 前向 Locomotion 没有实际用途。建立锁定/瞄准 Strafe 模式时再添加。
+修改：
 
-## 5. C++ 函数
+```text
+Source/Apex/Public/AbilitySystem/ApexAbilitySystemComponent.h
+Source/Apex/Private/AbilitySystem/ApexAbilitySystemComponent.cpp
+Source/Apex/Public/Character/ApexPlayerCharacter.h
+Source/Apex/Private/Character/ApexPlayerCharacter.cpp
+Source/Apex/Public/Player/ApexPlayerController.h
+Source/Apex/Private/Player/ApexPlayerController.cpp
+Source/Apex/Apex.Build.cs
+```
 
-| 函数 | 类型 | 作用 | 审阅状态 |
-| --- | --- | --- | --- |
-| `NativeInitializeAnimation()` | `UAnimInstance` Override | 调用 `Super`，缓存 Owner 与 MovementComponent。 | 已确认 |
-| `NativeUpdateAnimation(float DeltaSeconds)` | `UAnimInstance` Override | 调用 `Super`，必要时重新缓存引用，然后更新四个基础状态变量。 | 已确认 |
-| `CacheOwnerReferences()` | Private Helper | 集中执行 Owner / MovementComponent 查找，兼容 PIE、编辑器预览和重新初始化。 | 已确认 |
-| `ResetLocomotionState()` | Private Helper | Owner 无效时将动画状态恢复安全默认值，避免预览或切换 Pawn 后残留旧值。 | 已确认 |
+## 首批 Native GameplayTag
 
-### 5.1 更新原则
-
-- `NativeUpdateAnimation` 在安全的游戏线程阶段读取 UObject / CharacterMovement 状态。
-- AnimGraph 只读取已缓存的 float / bool，不在蓝图 EventGraph 每帧 Cast Character。
-- 所有 Override 必须先调用 `Super`。
-- Owner 在 AnimBP 编辑器预览中可能为空，空引用是合法状态，不能 `check()` 崩溃。
-- 本批没有委托和外部注册，不需要额外清理函数。
-
-## 6. 同批窄修复
-
-在 `AApexPlayerCharacter::SetupPlayerInputComponent()` 开头补充：
+统一放在：
 
 ```cpp
-Super::SetupPlayerInputComponent(PlayerInputComponent);
+namespace ApexGameplayTags
 ```
 
-这是 UE Framework Override 的标准父类调用，已在 Character 冷启动审查中记录。本批不重构其余输入代码。
+| C++ 变量名 | Tag 字符串 | 语义 |
+|---|---|---|
+| `InputTag_Ability` | `InputTag.Ability` | Ability 输入根标签，仅用于分类。 |
+| `InputTag_Ability_BasicAttack` | `InputTag.Ability.BasicAttack` | 普通攻击槽。 |
+| `InputTag_Ability_Skill1` | `InputTag.Ability.Skill1` | 第一个小技能，默认 Q。 |
+| `InputTag_Ability_Skill2` | `InputTag.Ability.Skill2` | 第二个小技能，默认 E。 |
+| `InputTag_Ability_Ultimate` | `InputTag.Ability.Ultimate` | 大招槽，默认 X。 |
 
-## 7. UE 项目自有资产
+Tag 不包含 Q/E/X 等物理键名。IMC 负责物理按键映射。
 
-### 7.1 建议目录
+不创建 GameplayTag 单例，不加入技能身份、伤害、状态或 InputBlocked Tag。
+
+## EApexAbilityActivationPolicy
+
+```cpp
+UENUM(BlueprintType)
+enum class EApexAbilityActivationPolicy : uint8
+{
+    OnInputTriggered,
+    WhileInputActive
+};
+```
+
+- `OnInputTriggered`：按下时尝试激活。引导、蓄力能力激活后仍可接收 Released。
+- `WhileInputActive`：按住期间，只要能力当前未激活就持续尝试，适合自动攻击或持续开火。
+- `OnSpawn`、被动监听和并发组后续按真实能力加入，本批不预造。
+
+## UApexGameplayAbility
+
+父类：
+
+```cpp
+UGameplayAbility
+```
+
+类声明：
+
+```cpp
+UCLASS(Abstract, Blueprintable)
+```
+
+构造默认值：
 
 ```text
-/Game/Blueprints/Characters/Phase/Animation/
+InstancingPolicy   = InstancedPerActor
+NetExecutionPolicy = LocalPredicted
+ReplicationPolicy = ReplicateNo
+ActivationPolicy  = OnInputTriggered
 ```
 
-项目自建内容统一放在 `/Game/Blueprints/`；该目录可以引用但不修改 `/Game/ParagonPhase/`。
+首批函数：
 
-### 7.2 资产命名
+```cpp
+EApexAbilityActivationPolicy GetActivationPolicy() const;
+UApexAbilitySystemComponent* GetApexAbilitySystemComponentFromActorInfo() const;
+AApexPlayerCharacter* GetApexPlayerCharacterFromActorInfo() const;
+const UApexSkillDefinition* GetSkillDefinition() const;
+```
 
-| 资产 | 引擎类型 | 作用 | 审阅状态 |
-| --- | --- | --- | --- |
-| `ABP_Apex_Phase` | Animation Blueprint，父类 `UApexAnimInstance` | Phase Skeleton 的 Apex 主动画图。 | 已确认 |
-| `BS_Apex_Phase_Locomotion` | `UBlendSpace1D` 资产 | 按 `GroundSpeed` 混合 Idle / Jog Forward。 | 已确认 |
-| `IMC_Apex_BaseMove` | Input Mapping Context | 将基础移动、视角和跳跃按键映射到项目自有 IA。 | 已确认 |
+- `ActivationPolicy` 使用 `EditDefaultsOnly, BlueprintReadOnly`。
+- `GetSkillDefinition()` 从当前 AbilitySpec 的 SourceObject 取得定义。
+- `GetSkillDefinition()` 必须使用 `UFUNCTION(BlueprintPure, Category = "Apex|Ability")` 暴露给蓝图，供技能蓝图读取当前 SkillDefinition；其余辅助 Getter 是否暴露给蓝图，以实际调用需要为准，避免无意义扩大 API。
+- 本批不覆写完整激活、Commit、冷却、消耗、目标或 Montage 流程。
+- 未来 `UApexProjectileCastAbility` 等模板直接或经极薄中间层继承该类。
 
-`BS_Apex_Phase_Locomotion` 和状态机都在 UE 编辑器中手动创建，不编写对应 C++ 子类。
+## UApexSkillDefinition
 
-Phase 原包现有 BlendSpace 是 Jog Lean、Slope Lean 和 Turn In Place 等专用资产，没有职责匹配的 Idle / Jog Forward 速度型 Locomotion BlendSpace。本批自行创建，避免复制不匹配的轴、采样点和用途；它只改变表现混合，不改变 CharacterMovement 控制。
+父类：
 
-## 8. BlendSpace 设计
+```cpp
+UPrimaryDataAsset
+```
 
-`BS_Apex_Phase_Locomotion`：
+类声明：
 
-| 设置 | 值 |
-| --- | --- |
-| Skeleton | `phase_Skeleton` |
-| Axis Name | `GroundSpeed` |
-| Minimum Axis Value | `0` |
-| Maximum Axis Value | `500`，对应当前 `MaxWalkSpeed` |
-| Sample at 0 | Phase `Idle` |
-| Sample at 500 | Phase `Jog_Fwd` |
+```cpp
+UCLASS(BlueprintType, Const)
+```
 
-它只计算表现姿势，不修改 Character 的真实速度。
+第一版唯一字段：
 
-## 9. AnimBP 与状态机设计
+```cpp
+TSubclassOf<UApexGameplayAbility> AbilityTemplateClass;
+```
 
-`ABP_Apex_Phase`：
+Getter：
 
-- Target Skeleton：`phase_Skeleton`。
-- Parent Class：`UApexAnimInstance`。
-- EventGraph：保持为空，不重复计算 C++ 已提供的状态。
-- State Machine：`Locomotion`。
+```cpp
+TSubclassOf<UApexGameplayAbility> GetAbilityTemplateClass() const;
+```
 
-状态：
+设计说明：
 
-| 状态 | 动画 |
-| --- | --- |
-| `Grounded` | `BS_Apex_Phase_Locomotion` |
-| `JumpStart` | Phase `Jump_Start`，不循环 |
-| `Falling` | Phase `Jump_Apex`；进入 UE 后预览确认循环或保持姿势是否自然 |
-| `Land` | Phase `Jump_Land`，不循环 |
+- SkillDefinition 资产本身作为技能身份入口。
+- 本批只确定“使用哪个 GA 模板”这一稳定关系。
+- Identity、Presentation、目标规则、CombatEntity、Effect/Cue 和受约束的 `FInstancedStruct ExecutionConfig` 后续增量加入。
+- 编辑器 Data Validation 检查 `AbilityTemplateClass` 非空。
 
-转换规则：
+## FApexAbilitySetAbilityGrant
 
-| 转换 | 条件 |
-| --- | --- |
-| `Grounded -> JumpStart` | `bIsFalling && VerticalSpeed > 0` |
-| `Grounded -> Falling` | `bIsFalling && VerticalSpeed <= 0`，覆盖走下悬崖 |
-| `JumpStart -> Falling` | JumpStart 动画即将结束，或已开始下降 |
-| `Falling -> Land` | `!bIsFalling` |
-| `Land -> Grounded` | Land 动画即将结束 |
+```cpp
+USTRUCT(BlueprintType)
+struct FApexAbilitySetAbilityGrant
+```
 
-### 9.1 AnimGraph 输出顺序
+字段：
 
-建议稳定结构：
+```cpp
+TObjectPtr<UApexSkillDefinition> SkillDefinition;
+int32 AbilityLevel = 1;
+FGameplayTag InputTag;
+```
+
+- `SkillDefinition` 必填。
+- `AbilityLevel` 必须大于 0。
+- `InputTag` 可空：主动输入能力使用有效 Tag；未来事件触发或被动能力可以不占输入槽。
+- 有效 InputTag 必须位于 `InputTag.Ability` 下。
+
+## FApexAbilitySetGrantedHandles
+
+运行时结构，只保存本次 AbilitySet 授予产生的：
+
+```cpp
+TArray<FGameplayAbilitySpecHandle> AbilitySpecHandles;
+```
+
+函数：
+
+```cpp
+void AddAbilitySpecHandle(FGameplayAbilitySpecHandle Handle);
+void TakeFromAbilitySystem(UApexAbilitySystemComponent* ASC);
+bool IsEmpty() const;
+```
+
+- 该结构由角色运行时实例持有，不写回 AbilitySet 资产。
+- `TakeFromAbilitySystem()` 只允许权威端执行，并在撤销后清空 Handle。
+- 第一版不保存 GE Handle 或动态 AttributeSet。
+
+## UApexAbilitySet
+
+父类：
+
+```cpp
+UPrimaryDataAsset
+```
+
+类声明：
+
+```cpp
+UCLASS(BlueprintType, Const)
+```
+
+配置：
+
+```cpp
+TArray<FApexAbilitySetAbilityGrant> GrantedAbilities;
+```
+
+执行函数：
+
+```cpp
+void GiveToAbilitySystem(
+    UApexAbilitySystemComponent* ASC,
+    FApexAbilitySetGrantedHandles* OutGrantedHandles) const;
+```
+
+授予步骤：
+
+1. 验证 ASC 为权威端。
+2. 遍历 Grant 条目并校验 SkillDefinition、模板类、等级和 InputTag。
+3. 使用 SkillDefinition 的 `AbilityTemplateClass` 创建 `FGameplayAbilitySpec`。
+4. 把 SkillDefinition 设置为 Spec SourceObject。
+5. 有效 InputTag 写入 Spec Dynamic Source Tags。
+6. 调用 `GiveAbility()`。
+7. 把返回的 SpecHandle 写入 `OutGrantedHandles`。
+
+Data Validation 额外检查同一 AbilitySet 中不允许重复的有效 InputTag。
+
+## FApexAbilityInputAction
+
+```cpp
+USTRUCT(BlueprintType)
+struct FApexAbilityInputAction
+```
+
+字段：
+
+```cpp
+TObjectPtr<const UInputAction> InputAction;
+FGameplayTag InputTag;
+```
+
+只允许 `InputTag.Ability` 子 Tag。
+
+## UApexAbilityInputConfig
+
+父类：
+
+```cpp
+UDataAsset
+```
+
+类声明：
+
+```cpp
+UCLASS(BlueprintType, Const)
+```
+
+配置：
+
+```cpp
+TArray<FApexAbilityInputAction> AbilityInputActions;
+```
+
+Getter：
+
+```cpp
+const TArray<FApexAbilityInputAction>& GetAbilityInputActions() const;
+```
+
+Data Validation 检查：
+
+- InputAction 非空。
+- InputTag 有效且属于 `InputTag.Ability`。
+- InputAction 不重复。
+- InputTag 不重复。
+
+该类只处理 Ability 输入。现有 Jump、Move、Look、MouseLook 成员与绑定保持原样。
+
+## UApexAbilitySystemComponent 输入队列
+
+新增私有成员：
+
+```cpp
+TArray<FGameplayAbilitySpecHandle> InputPressedSpecHandles;
+TArray<FGameplayAbilitySpecHandle> InputHeldSpecHandles;
+TArray<FGameplayAbilitySpecHandle> InputReleasedSpecHandles;
+```
+
+新增公共函数：
+
+```cpp
+void AbilityInputTagPressed(const FGameplayTag& InputTag);
+void AbilityInputTagReleased(const FGameplayTag& InputTag);
+void ProcessAbilityInput(float DeltaTime, bool bGamePaused);
+void ClearAbilityInput();
+```
+
+重写：
+
+```cpp
+virtual void AbilitySpecInputPressed(FGameplayAbilitySpec& Spec) override;
+virtual void AbilitySpecInputReleased(FGameplayAbilitySpec& Spec) override;
+```
+
+行为：
+
+- `AbilityInputTagPressed/Released()` 只匹配 Dynamic Source Tags 并维护输入队列，不在遍历 ActivatableAbilities 时直接激活能力。
+- Pressed：匹配 Spec Dynamic Source Tags，加入 Pressed 与 Held。
+- Released：加入 Released，并从 Held 移除。
+- `ProcessAbilityInput()` 先收集 Held 中待激活的 `WhileInputActive`，再处理 Pressed 状态和 `OnInputTriggered`，统一调用 `TryActivateAbility()`，最后处理 Released。
+- Pressed 阶段必须设置 `Spec.InputPressed = true`；Released 阶段必须设置为 `false`。
+- 已激活能力收到 `AbilitySpecInputPressed/Released`。
+- Pressed/Released 通过 `InvokeReplicatedEvent()` 支持 `WaitInputPress/WaitInputRelease` 等 AbilityTask。
+- 每帧结束清空 Pressed/Released，Held 保留到松开。
+- 输入队列属于当前 Avatar；撤销 CoreAbilitySet、UnPossessed 或更换 Avatar 时必须调用 `ClearAbilityInput()`，防止 Held Handle 跨角色残留。
+- 本批不加入 InputBlocked Tag；`ClearAbilityInput()` 同时作为后续状态/UI 切换入口。
+
+## AApexPlayerController
+
+新增：
+
+```cpp
+UApexAbilitySystemComponent* GetApexAbilitySystemComponent() const;
+virtual void PostProcessInput(float DeltaTime, bool bGamePaused) override;
+```
+
+- 从 `AApexPlayerState` 取得 ASC。
+- 只有本地 Controller 调用 `ASC->ProcessAbilityInput()`。
+- Controller 只推进输入队列，不决定具体技能或保存战斗状态。
+
+## AApexPlayerCharacter
+
+新增资产成员：
+
+```cpp
+TObjectPtr<UApexAbilitySet> CoreAbilitySet;
+TObjectPtr<UApexAbilityInputConfig> AbilityInputConfig;
+```
+
+属性：
 
 ```text
-Locomotion State Machine
--> Save Cached Pose "LocomotionPose"
--> UpperBody Slot + Layered Blend Per Bone（从 spine_01）
--> FullBody Slot
--> Output Pose
+EditDefaultsOnly
+BlueprintReadOnly
+Category = "Ability System"
 ```
 
-Phase 原始 Skeleton 已包含 `UpperBody` 和 `FullBody` Slot；第一版只复用，不修改第三方 Skeleton。技能 Montage 尚未接入，因此本批只验证图可编译和 Locomotion 正常。
+新增运行时成员：
 
-## 10. 项目自有 IA / IMC
+```cpp
+FApexAbilitySetGrantedHandles CoreAbilitySetHandles;
+```
 
-保留并使用：
+新增函数：
+
+```cpp
+void GrantCoreAbilitySet();
+void RemoveCoreAbilitySet();
+void InputAbilityTagPressed(FGameplayTag InputTag);
+void InputAbilityTagReleased(FGameplayTag InputTag);
+virtual void UnPossessed() override;
+virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+```
+
+生命周期：
+
+- `PossessedBy()`：服务器完成 ActorInfo 初始化后，授予 CoreAbilitySet。
+- `OnRep_PlayerState()`：客户端只初始化 ActorInfo，不执行授予。
+- `SetupPlayerInputComponent()`：保留现有移动/视角/跳跃绑定，再遍历 AbilityInputConfig。
+- Ability InputAction 的 `Started` 调用 Pressed。
+- `Completed` 与 `Canceled` 调用 Released。
+- `UnPossessed()` 和 `EndPlay()` 在权威端幂等撤销本角色授予的 Handle，避免换英雄或重生后残留。
+- 服务器无 CoreAbilitySet 时只记录一次明确日志，不崩溃。
+
+`BP_Hero_Phase` 第一版直接配置 CoreAbilitySet 与 AbilityInputConfig。未来 HeroDefinition 建立后只迁移这两个引用，不改变 AbilitySet、SkillDefinition 或输入管线。
+
+## 网络边界
 
 ```text
-/Game/Blueprints/Input/Actions/IA_Jump
-/Game/Blueprints/Input/Actions/IA_Move
-/Game/Blueprints/Input/Actions/IA_Look
-/Game/Blueprints/Input/Actions/IA_MouseLook
+服务器：
+    GiveAbility / ClearAbility
+    保存权威 AbilitySpec
+
+本地客户端：
+    Enhanced Input 产生 Pressed / Released
+    ProcessAbilityInput 尝试本地预测激活
+
+GAS：
+    根据 GA NetExecutionPolicy 完成预测、服务器确认和输入事件同步
 ```
 
-在 `/Game/Blueprints/Input/` 新建 `IMC_Apex_BaseMove`，包含键盘、鼠标和手柄的基础移动映射。稍后的 UE 人工清单会明确每个 Modifier。
+- 不在客户端调用 `GiveAbility()`。
+- 不在服务端为远端 Pawn 处理本地输入队列。
+- AbilitySet 和 SkillDefinition 是只读内容资产，不保存玩家运行时状态。
+- 第一版使用 Character Blueprint 的硬引用，随英雄一起加载，不引入异步 AssetManager 管线。
 
-人工配置必须同时完成：
+## 本批不做
 
-1. `BP_Hero_Phase` 的四个 InputAction 成员切换到项目自有 IA。
-2. `IMC_Apex_BaseMove` 的 Mapping 指向同一批项目自有 IA。
-3. 当前 PlayerController 的 `DefaultMappingContexts` 改用 `IMC_Apex_BaseMove`。
+- 不创建 Projectile、Channel、Area 等空模板类。
+- 不创建正式技能、伤害、治疗、GE、Cue、CombatEntity 或 AbilityTask。
+- 不创建完整 HeroDefinition。
+- 不加入 ActivationGroup、OnSpawn、InputBlocked 或 TagRelationshipMapping。
+- 不修改现有移动、跳跃、镜头和动画行为。
+- 不使用 MCP 创建 UE 资产。
 
-## 11. 实施与审查顺序
+## 编译和验证
 
-1. 用户审阅本文的类名、文件、变量、函数、目录和 UE 资产命名。
-2. Codex 根据确认结果编写 ClaudeCode 实施 Prompt。
-3. ClaudeCode 只写 `UApexAnimInstance` C++ 和 `Super` 窄修复，并提交实施报告。
-4. Codex 审查新增类、函数、成员、注释和编译风险。
-5. 用户确认代码审查结果。
-6. 运行 `Scripts/RegenerateProjectFiles.ps1`，让 Rider 识别新增文件。
-7. 编译 `ApexEditor Win64 Development`。
-8. Codex 覆盖 `Current_UE_Manual_Steps.md`。
-9. 用户在 UE 中手动创建 BlendSpace、AnimBP、状态机、IMC 并完成 PIE 验证。
-
-## 12. 验证标准
-
-### C++ 阶段
-
-- `ApexEditor Win64 Development` 编译通过。
-- Rider 能看到 `Public/Animation` 与 `Private/Animation` 新文件。
-- AnimInstance 在无 Owner 的编辑器预览环境不会崩溃。
-
-### UE / PIE 阶段
-
-- `BP_Hero_Phase.Mesh.AnimClass = ABP_Apex_Phase`。
-- Idle 与 Jog 根据速度平滑混合。
-- 主动跳跃播放 JumpStart / Falling / Land。
-- 走下平台能直接进入 Falling，不错误播放主动起跳。
-- WASD、鼠标视角和 Space 使用项目自有 IA / IMC 后仍正常。
-- 单人 PIE 不崩溃、无空引用错误。
-
-## 13. 用户确认结果
-
-以下事项已于 2026-07-16 批准：
-
-1. 新增 `UApexAnimInstance` 及两个文件路径。
-2. 四个状态变量、两个内部引用和四个函数名称。
-3. 项目自有动画目录改为 `/Game/Blueprints/Characters/Phase/Animation/`。
-4. 使用 `ABP_Apex_Phase`、`BS_Apex_Phase_Locomotion`、`IMC_Apex_BaseMove`。
-5. 同批补上 `SetupPlayerInputComponent()` 的 `Super` 调用。
+- 子代理执行 `ApexEditor Win64 Development` 编译。
+- Codex 审查代码和报告后，用户自行刷新 Rider 项目文件。
+- 用户按 `Current_UE_Manual_Steps.md` 创建最小 InputProbe 蓝图和配置资产。
+- 单人和 Listen Server + Client 验证四个输入槽都能激活对应 Spec。

@@ -64,12 +64,12 @@
 
 目标：建立角色、输入、ASC、属性、技能激活的最小闭环。
 
-- [ ] 玩家角色拥有 ASC。
-- [ ] AttributeSet 可初始化。
-- [ ] 输入可触发 Ability。
-- [ ] 一个最小 Ability 可激活和结束。
-- [ ] 单人 PIE 验证。
-- [ ] Listen Server + Client 基础验证。
+- [x] 玩家角色拥有 ASC。
+- [x] AttributeSet 可初始化。
+- [x] 输入可触发 Ability。
+- [x] 一个最小 Ability 可激活和结束。
+- [x] 单人 PIE 验证。
+- [x] Listen Server + Client 基础验证。
 
 ## Phase 4 - 第一批技能原型
 

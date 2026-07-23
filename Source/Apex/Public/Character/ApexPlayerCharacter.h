@@ -4,11 +4,15 @@
 
 #include "CoreMinimal.h"
 #include "Character/ApexCharacterBase.h"
+#include "AbilitySystemInterface.h"
+#include "AbilitySystem/ApexAbilitySet.h"
 #include "ApexPlayerCharacter.generated.h"
 
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UApexAbilitySet;
+class UApexAbilityInputConfig;
 struct FInputActionValue;
 
 /**
@@ -18,13 +22,19 @@ struct FInputActionValue;
  * - 从 AApexCharacterBase 派生，继承基础身体配置。
  * - 拥有 SpringArm 和 Camera，提供第三人称视角。
  * - 绑定 Enhanced Input 的 Move / Look / Jump 输入 Action。
- * - 不重复添加 MappingContext（由 AApexPlayerController 统一管理），避免重复输入上下文。
- * - 不包含技能输入、GAS、Montage 播放。
+ * - 不重复添加 MappingContext（由 AApexPlayerController 统一管理）。
  *
- * 后续可在蓝图中设置 Mesh 为 Paragon 英雄资产、配置 InputAction 引用。
+ * 【Ability 授予】：
+ * - CoreAbilitySet 由 PossessedBy 在服务器授予。
+ * - 客户端不执行授予——AbilitySpec 通过 GAS 复制到达。
+ * - UnPossessed/EndPlay 时幂等撤销 Handle。
+ *
+ * 【Ability 输入路由】：
+ * - SetupPlayerInputComponent 遍历 AbilityInputConfig 绑定 Ability InputAction。
+ * - 输入回调调用 InputAbilityTagPressed/Released，转发到 ASC 队列。
  */
 UCLASS(Abstract)
-class APEX_API AApexPlayerCharacter : public AApexCharacterBase
+class APEX_API AApexPlayerCharacter : public AApexCharacterBase, public IAbilitySystemInterface
 {
 	GENERATED_BODY()
 
@@ -57,9 +67,22 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input", meta=(AllowPrivateAccess="true"))
 	TObjectPtr<UInputAction> MouseLookAction;
 
+	// --- Ability 资产配置 ---
+
+	/** 核心能力集 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability System", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UApexAbilitySet> CoreAbilitySet;
+
+	/** Ability 输入绑定配置 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Ability System", meta=(AllowPrivateAccess="true"))
+	TObjectPtr<UApexAbilityInputConfig> AbilityInputConfig;
+
 public:
 	/** Constructor */
 	AApexPlayerCharacter();
+
+	// --- IAbilitySystemInterface ---
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
 
 protected:
 	// --- 输入绑定 ---
@@ -69,33 +92,54 @@ protected:
 
 	// --- 输入回调（由 Enhanced Input 触发）---
 
-	/** MoveAction / MouseLookAction 回调，提取 FVector2D 后路由到 DoMove / DoLook */
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
 
 public:
 	// --- 蓝图可调用的输入处理 ---
 
-	/** 处理移动输入：Right=左右(X), Forward=前后(Y) */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoMove(float Right, float Forward);
 
-	/** 处理视角输入：Yaw=水平(X), Pitch=垂直(Y) */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoLook(float Yaw, float Pitch);
 
-	/** 跳跃按下 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpStart();
 
-	/** 跳跃松开 */
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
 public:
-	/** 获取 CameraSpringArm */
 	FORCEINLINE USpringArmComponent* GetCameraSpringArm() const { return CameraSpringArm; }
-
-	/** 获取 FollowCamera */
 	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+protected:
+	// --- GAS 初始化 ---
+
+	void InitializeAbilitySystemActorInfo();
+	virtual void PossessedBy(AController* NewController) override;
+	virtual void OnRep_PlayerState() override;
+
+	// --- Ability 授予 ---
+
+	/** 服务器 PossessedBy 时授予 CoreAbilitySet */
+	void GrantCoreAbilitySet();
+
+	/** 服务器 UnPossessed/EndPlay 时撤销 CoreAbilitySet */
+	void RemoveCoreAbilitySet();
+
+	/** 通知 ASC 有 Ability InputTag 按下 */
+	void InputAbilityTagPressed(FGameplayTag InputTag);
+
+	/** 通知 ASC 有 Ability InputTag 释放 */
+	void InputAbilityTagReleased(FGameplayTag InputTag);
+
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	/** 本次授予产生的 Handle（用于后续撤销） */
+	UPROPERTY()
+	FApexAbilitySetGrantedHandles CoreAbilitySetHandles;
 };

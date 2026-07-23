@@ -1,6 +1,10 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "Character/ApexPlayerCharacter.h"
+#include "Player/ApexPlayerState.h"
+#include "AbilitySystem/ApexAbilitySystemComponent.h"
+#include "AbilitySystemComponent.h"
+#include "Input/ApexAbilityInputConfig.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -15,28 +19,173 @@ AApexPlayerCharacter::AApexPlayerCharacter()
 	// --- 相机摇杆（SpringArm）---
 	CameraSpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraSpringArm"));
 	CameraSpringArm->SetupAttachment(RootComponent);
-	CameraSpringArm->TargetArmLength = 400.f;           // 默认相机距离
-	CameraSpringArm->bUsePawnControlRotation = true;    // SpringArm 跟随 Controller 旋转
+	CameraSpringArm->TargetArmLength = 400.f;
+	CameraSpringArm->bUsePawnControlRotation = true;
 
 	// --- 跟随相机 ---
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraSpringArm, USpringArmComponent::SocketName);
-	FollowCamera->bUsePawnControlRotation = false; // 相机本身不额外旋转，由 SpringArm 控制
+	FollowCamera->bUsePawnControlRotation = false;
 
-	// 不开启 Tick。
 	PrimaryActorTick.bCanEverTick = false;
 }
+
+// ============================================================================
+// GAS 初始化
+// ============================================================================
+
+UAbilitySystemComponent* AApexPlayerCharacter::GetAbilitySystemComponent() const
+{
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	return ApexPS ? ApexPS->GetAbilitySystemComponent() : nullptr;
+}
+
+void AApexPlayerCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	InitializeAbilitySystemActorInfo();
+
+	// 服务器：ActorInfo 初始化后授予 CoreAbilitySet。
+	GrantCoreAbilitySet();
+}
+
+void AApexPlayerCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	// 客户端只初始化 ActorInfo，不执行授予（AbilitySpec 通过 GAS 复制到达）。
+	InitializeAbilitySystemActorInfo();
+}
+
+void AApexPlayerCharacter::InitializeAbilitySystemActorInfo()
+{
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	if (!ApexPS) return;
+
+	UApexAbilitySystemComponent* ASC = ApexPS->GetApexAbilitySystemComponent();
+	if (!ASC) return;
+
+	ASC->InitAbilityActorInfo(ApexPS, this);
+
+	UE_LOG(LogApex, Log, TEXT("[AApexPlayerCharacter] InitAbilityActorInfo: Owner=%s, Avatar=%s, LocalRole=%d"),
+		*GetNameSafe(ApexPS), *GetNameSafe(this), static_cast<int32>(GetLocalRole()));
+}
+
+// ============================================================================
+// Ability 授予与撤销
+// ============================================================================
+
+void AApexPlayerCharacter::GrantCoreAbilitySet()
+{
+	if (!CoreAbilitySet)
+	{
+		UE_LOG(LogApex, Log, TEXT("[AApexPlayerCharacter] 无 CoreAbilitySet，跳过授予。"));
+		return;
+	}
+
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	if (!ApexPS) return;
+
+	UApexAbilitySystemComponent* ASC = ApexPS->GetApexAbilitySystemComponent();
+	if (!ASC) return;
+
+	// 先撤销已有 Handle，避免重复 Possess 造成重复 Spec。
+	RemoveCoreAbilitySet();
+
+	CoreAbilitySet->GiveToAbilitySystem(ASC, &CoreAbilitySetHandles);
+}
+
+void AApexPlayerCharacter::RemoveCoreAbilitySet()
+{
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	if (!ApexPS) return;
+
+	UApexAbilitySystemComponent* ASC = ApexPS->GetApexAbilitySystemComponent();
+	if (!ASC) return;
+
+	// 输入队列是本地运行时状态，客户端和服务端均须清空。
+	// 否则 UnPossessed 时按键仍 Held 的旧 Handle 会残留在 PlayerState ASC，
+	// 污染重生或换英雄后的输入状态。
+	ASC->ClearAbilityInput();
+
+	// TakeFromAbilitySystem 内部使用 IsOwnerActorAuthoritative 只在权威端清除 Spec。
+	CoreAbilitySetHandles.TakeFromAbilitySystem(ASC);
+}
+
+void AApexPlayerCharacter::UnPossessed()
+{
+	// 权威端：PossessedBy 授予的能力在此撤销。
+	RemoveCoreAbilitySet();
+	Super::UnPossessed();
+}
+
+void AApexPlayerCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	RemoveCoreAbilitySet();
+	Super::EndPlay(EndPlayReason);
+}
+
+// ============================================================================
+// Ability 输入路由
+// ============================================================================
+
+void AApexPlayerCharacter::InputAbilityTagPressed(FGameplayTag InputTag)
+{
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	if (!ApexPS) return;
+
+	UApexAbilitySystemComponent* ASC = ApexPS->GetApexAbilitySystemComponent();
+	if (ASC)
+	{
+		ASC->AbilityInputTagPressed(InputTag);
+	}
+}
+
+void AApexPlayerCharacter::InputAbilityTagReleased(FGameplayTag InputTag)
+{
+	AApexPlayerState* ApexPS = GetPlayerState<AApexPlayerState>();
+	if (!ApexPS) return;
+
+	UApexAbilitySystemComponent* ASC = ApexPS->GetApexAbilitySystemComponent();
+	if (ASC)
+	{
+		ASC->AbilityInputTagReleased(InputTag);
+	}
+}
+
+// ============================================================================
+// 输入
+// ============================================================================
 
 void AApexPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
-	// 尝试转换为 Enhanced Input Component
 	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
 	if (!EnhancedInputComponent)
 	{
 		UE_LOG(LogApex, Error, TEXT("AApexPlayerCharacter::SetupPlayerInputComponent - '%s' 未找到 EnhancedInputComponent！"), *GetNameSafe(this));
 		return;
+	}
+
+	// --- Ability 输入：遍历 AbilityInputConfig 绑定 ---
+	if (AbilityInputConfig)
+	{
+		for (const FApexAbilityInputAction& Action : AbilityInputConfig->GetAbilityInputActions())
+		{
+			if (!Action.InputAction || !Action.InputTag.IsValid())
+			{
+				continue;
+			}
+
+			EnhancedInputComponent->BindAction(Action.InputAction, ETriggerEvent::Started, this,
+				&AApexPlayerCharacter::InputAbilityTagPressed, Action.InputTag);
+			EnhancedInputComponent->BindAction(Action.InputAction, ETriggerEvent::Completed, this,
+				&AApexPlayerCharacter::InputAbilityTagReleased, Action.InputTag);
+			EnhancedInputComponent->BindAction(Action.InputAction, ETriggerEvent::Canceled, this,
+				&AApexPlayerCharacter::InputAbilityTagReleased, Action.InputTag);
+		}
 	}
 
 	// --- 跳跃：Started -> DoJumpStart, Completed -> DoJumpEnd ---
@@ -65,33 +214,23 @@ void AApexPlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInpu
 	}
 }
 
-// --- 输入回调 ---
-
 void AApexPlayerCharacter::Move(const FInputActionValue& Value)
 {
-	// Enhanced Input 值为 FVector2D: X=Right, Y=Forward
 	const FVector2D MovementVector = Value.Get<FVector2D>();
 	DoMove(MovementVector.X, MovementVector.Y);
 }
 
 void AApexPlayerCharacter::Look(const FInputActionValue& Value)
 {
-	// Enhanced Input 值为 FVector2D: X=Yaw, Y=Pitch
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
-// --- 蓝图可调用输入处理 ---
-
 void AApexPlayerCharacter::DoMove(float Right, float Forward)
 {
 	AController* PlayerController = GetController();
-	if (!PlayerController)
-	{
-		return;
-	}
+	if (!PlayerController) return;
 
-	// 使用 Controller 的 Yaw 旋转计算世界空间方向
 	const FRotator Rotation = PlayerController->GetControlRotation();
 	const FRotator YawRotation(0.0, Rotation.Yaw, 0.0);
 
@@ -104,11 +243,7 @@ void AApexPlayerCharacter::DoMove(float Right, float Forward)
 
 void AApexPlayerCharacter::DoLook(float Yaw, float Pitch)
 {
-	if (!GetController())
-	{
-		return;
-	}
-
+	if (!GetController()) return;
 	AddControllerYawInput(Yaw);
 	AddControllerPitchInput(Pitch);
 }

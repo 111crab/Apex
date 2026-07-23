@@ -255,3 +255,62 @@
 - 基础移动 Mapping Context：`/Game/Blueprints/Input/IMC_Apex_BaseMove`。
 
 **原因：** 让项目自建内容与 `/Game/ParagonPhase/`、模板内容和其他第三方资源保持清晰边界，便于 Git、迁移和后续替换。
+
+## 2026-07-21 - 保留并重构现有 Apex Gameplay Framework 外壳
+
+**决策：** 保留项目已经存在的 `AApexPlayerController` 与 `AApexGameMode` 类名，不再创建职责重复的原生类；两者在 GAS Framework 首批实施时按长期目录和职责重构。
+
+**同时确认：**
+- 玩家英雄采用 `PlayerState` 持有 ASC、Character 作为 Avatar；AI Character 同时作为 ASC Owner 与 Avatar。
+- 新增项目自有 `AApexPlayerState`，具体成员和文件路径在实施前单独审阅。
+- `BP_Apex_PlayerController` 与 `BP_Apex_GameMode` 在 GAS 基础 RFC 通过后的首个 Gameplay Framework 实施批次创建，不提前复制当前模板蓝图。
+- PlayerController 负责本地输入、UI/InputMode 和技能输入意图转交，不保存战斗状态。
+- GameMode 负责服务端生成、规则与 Framework 类选择，不承载技能逻辑。
+
+**原因：** 当前两个原生类已经提供可继续演进的类型身份；提前创建新蓝图只会重复模板配置，并在 PlayerState、ASC 和 InputTag 链确定后再次返工。
+
+## 2026-07-23 - AttributeSet 按资源结算与战斗参数拆分
+
+**决策：** Apex 采用无业务属性的 `UApexAttributeSet` 公共基类、负责生命与法力结算的 `UApexVitalAttributeSet`，以及后续按正式伤害模型创建的 `UApexCombatAttributeSet`。
+
+**同时确认：**
+
+- 第一批只实现 `Health`、`MaxHealth`、`Mana`、`MaxMana`。
+- 第一批使用 C++ 默认值 100 验证 GAS 和网络链路，Startup GE 后续再引入。
+- `Health/MaxHealth` 向所有相关客户端复制；`Mana/MaxMana` 只向拥有者复制。
+- `MaxHealth` 下限为 1；`MaxMana` 下限为 0，以兼容无蓝量英雄。
+- 不预先加入力量、智力等主属性；物理强度、法术强度、护甲、抗性和穿透在伤害模型确定后进入 `UApexCombatAttributeSet`。
+- 单次最终伤害不作为持久 Attribute；未来通过 ExecCalc 和 `IncomingDamage/IncomingHealing` 等 Meta Attribute 进入资源结算。
+
+**原因：** AttributeSet 应按稳定的数据不变量、复制边界和结算职责拆分，而不是按技能或临时字段分类。该方案吸收 Lyra 的来源参数/目标结算边界，同时保持适合 Apex 规模的简洁结构。
+
+## 2026-07-23 - AbilitySet 定位为技能授予清单
+
+**决策：** Apex 的 AbilitySet 是面向 ASC 的只读授予清单，不是技能定义、英雄定义或运行时状态容器。
+
+**分层：**
+
+```text
+HeroDefinition / 装备 / 模式
+    -> AbilitySet
+        -> SkillDefinition
+            -> UApexGameplayAbility 及其模板子类
+```
+
+**同时确认：**
+
+- `UApexGameplayAbility` 是所有 Apex GA 的抽象根基类，不是万能技能实现。
+- `UApexSkillDefinition` 是单个技能的配置入口，第一版只保存 `AbilityTemplateClass`。
+- AbilitySet 条目引用 SkillDefinition，并在授予时指定 AbilityLevel 与可选 InputTag。
+- SkillDefinition 作为 AbilitySpec SourceObject，使同一 GA 模板能够服务多个技能定义。
+- InputTag 属于装配槽位，不属于技能固有身份。
+- AbilitySet 资产不保存 Handle；运行时 `GrantedHandles` 由授予对象持有并负责撤销。
+- 第一版 AbilitySet 只授予 GA，不动态授予 GE 或 AttributeSet。
+- 普通攻击、小技能一、小技能二和大招使用语义 Tag；Q/E/X 只存在于 IMC 物理映射。
+
+**来源与取舍：**
+
+- 借鉴 Lyra 的 AbilitySet 授予、Handle 回收、ActivationPolicy 和输入队列。
+- 借鉴漫威争锋 AbilityAsset/AbilityConfig 的“稳定根配置 + 模板专属配置”思想。
+- 保留 Apex 已确认的 AbilityTemplate、AbilityTask、CombatEntity 和特殊 GA 扩展边界。
+- 不复制 Lyra 的完整 PawnData/GameFeature/Experience，也不实现任意 Step 解释器。

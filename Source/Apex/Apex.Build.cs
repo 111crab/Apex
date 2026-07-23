@@ -18,10 +18,15 @@ public class Apex : ModuleRules
 			"StateTreeModule",
 			"GameplayStateTreeModule",
 			"UMG",
-			"Slate"
+			"Slate",
+			"GameplayAbilities"
 		});
 
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] {
+			"GameplayTasks"
+		});
+
+		PublicDependencyModuleNames.Add("GameplayTags");
 
 		PublicIncludePaths.AddRange(new string[] {
 			"Apex",
